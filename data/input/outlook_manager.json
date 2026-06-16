@@ -1,0 +1,17 @@
+[
+  {
+    "id": "outlook_event_1",
+    "title": "Командная встреча",
+    "description": "Обсуждение задач на неделю",
+    "start_time": "2026-06-15T15:00:00",
+    "end_time": "2026-06-15T16:00:00",
+    "organizer": "manager",
+    "attendees": [
+      "developer_1",
+      "developer_2",
+      "leader"
+    ],
+    "status": "confirmed",
+    "updated_at": "2026-06-15T12:00:00"
+  }
+]
