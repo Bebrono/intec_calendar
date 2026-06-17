@@ -1,7 +1,10 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.codex-remote-attachments/
 .venv/
 venv/
 data/sync.db
+data/google_token.json
+data/google_oauth_state.json
 logs/*.log

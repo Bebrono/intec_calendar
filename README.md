@@ -18,6 +18,7 @@ The first version uses JSON files instead of real Yandex Calendar, Google Calend
 
 - `CalendarAdapter` defines the calendar interface: `get_events`, `create_event`, `update_event`, `delete_event`.
 - `FileCalendarAdapter` is the temporary JSON-backed implementation.
+- `GoogleCalendarAdapter` is a real Google Calendar API adapter for CRUD checks.
 - `EventMapper` converts JSON payloads to `CalendarEvent` objects and manages sync metadata in descriptions.
 - `SyncService` contains the business logic and does not depend on JSON storage directly.
 - `Storage` uses SQLite and SQLAlchemy for `event_mappings` and `sync_logs`.
@@ -51,6 +52,31 @@ The demo resets `data/output`, `data/sync.db`, and `logs/sync.log`, then shows:
 1. creation of an Outlook event and propagation to the other calendars;
 2. update propagation;
 3. soft deletion propagation.
+
+## Google Calendar API
+
+The Google adapter uses an OAuth desktop client file named `client_secret_*.json`.
+The first authorization creates a local `data/google_token.json`; this token is ignored by Git.
+
+Generate an OAuth URL:
+
+```bash
+python main.py google auth-url
+```
+
+Open the URL, allow access, then pass the final `localhost` redirect URL or code:
+
+```bash
+python main.py google auth-finish "<final_localhost_url_or_code>"
+```
+
+Run a live CRUD smoke-test against the `primary` Google Calendar:
+
+```bash
+python main.py google smoke-test
+```
+
+The smoke-test creates a temporary event, updates it, and deletes it.
 
 ## Calendar Files
 
