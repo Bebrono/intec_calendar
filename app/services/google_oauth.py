@@ -12,7 +12,10 @@ from googleapiclient.discovery import build
 from app.config import PROJECT_ROOT, ensure_project_dirs
 
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.events",
+]
 REDIRECT_URI = "http://localhost"
 TOKEN_PATH = Path("data/google_token.json")
 OAUTH_STATE_PATH = Path("data/google_oauth_state.json")
@@ -83,6 +86,15 @@ def load_credentials(root: Path = PROJECT_ROOT) -> Credentials:
     if not token_path.exists():
         raise FileNotFoundError(
             "Google token not found. Run `python main.py google auth-url` first."
+        )
+
+    token_payload = json.loads(token_path.read_text(encoding="utf-8"))
+    granted_scopes = set(token_payload.get("scopes") or [])
+    requested_scopes = set(SCOPES)
+    if not requested_scopes.issubset(granted_scopes):
+        raise RuntimeError(
+            "Google token does not have enough scopes. "
+            "Re-run `python main.py google auth-url` and finish OAuth again."
         )
 
     credentials = Credentials.from_authorized_user_file(str(token_path), SCOPES)

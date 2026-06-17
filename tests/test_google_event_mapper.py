@@ -1,8 +1,10 @@
 from datetime import datetime
-from zoneinfo import ZoneInfo
-
 from app.models import CalendarEvent
-from app.services.google_event_mapper import DEFAULT_TIMEZONE, GoogleEventMapper
+from app.services.google_event_mapper import (
+    DEFAULT_TIMEZONE,
+    SYNC_UPDATED_AT_KEY,
+    GoogleEventMapper,
+)
 
 
 def test_calendar_event_is_converted_to_google_payload():
@@ -27,6 +29,10 @@ def test_calendar_event_is_converted_to_google_payload():
     assert payload["description"] == "Planning"
     assert payload["start"]["timeZone"] == DEFAULT_TIMEZONE
     assert payload["attendees"] == [{"email": "dev@example.com"}]
+    assert (
+        payload["extendedProperties"]["private"][SYNC_UPDATED_AT_KEY]
+        == "2026-06-17T09:00:00"
+    )
 
 
 def test_google_payload_is_converted_to_calendar_event():
@@ -41,6 +47,11 @@ def test_google_payload_is_converted_to_calendar_event():
         "attendees": [{"email": "dev@example.com"}],
         "status": "cancelled",
         "updated": "2026-06-17T09:00:00Z",
+        "extendedProperties": {
+            "private": {
+                SYNC_UPDATED_AT_KEY: "2026-06-17T09:30:00",
+            }
+        },
     }
 
     event = mapper.from_google(payload, source_owner="developer_2")
@@ -49,12 +60,5 @@ def test_google_payload_is_converted_to_calendar_event():
     assert event.title == "Google event"
     assert event.status == "deleted"
     assert event.source_system == "google"
-    assert event.start_time == datetime(
-        2026,
-        6,
-        17,
-        10,
-        0,
-        0,
-        tzinfo=ZoneInfo(DEFAULT_TIMEZONE),
-    )
+    assert event.start_time == datetime(2026, 6, 17, 10, 0, 0)
+    assert event.updated_at == datetime(2026, 6, 17, 9, 30, 0)

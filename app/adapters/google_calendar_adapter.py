@@ -62,13 +62,14 @@ class GoogleCalendarAdapter(CalendarAdapter):
             .get(calendarId=self.calendar_id, eventId=event_id)
             .execute()
         )
-        self.service.events().delete(
-            calendarId=self.calendar_id,
-            eventId=event_id,
-        ).execute()
-        deleted = dict(current)
-        deleted["status"] = "cancelled"
-        return self.mapper.from_google(deleted, source_owner=self.owner)
+        body = dict(current)
+        body["status"] = "cancelled"
+        updated = (
+            self.service.events()
+            .update(calendarId=self.calendar_id, eventId=event_id, body=body)
+            .execute()
+        )
+        return self.mapper.from_google(updated, source_owner=self.owner)
 
     def _is_supported_event(self, payload: dict) -> bool:
         if payload.get("eventType") not in (None, "default"):

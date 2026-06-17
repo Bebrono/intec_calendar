@@ -41,6 +41,12 @@ Run synchronization against the working calendar files:
 python main.py sync
 ```
 
+Run synchronization with a real Google Calendar for `developer_2`:
+
+```bash
+python main.py sync --real-google
+```
+
 Run the deterministic demo scenario:
 
 ```bash
@@ -57,6 +63,7 @@ The demo resets `data/output`, `data/sync.db`, and `logs/sync.log`, then shows:
 
 The Google adapter uses an OAuth desktop client file named `client_secret_*.json`.
 The first authorization creates a local `data/google_token.json`; this token is ignored by Git.
+The live sync mode also creates a local `data/google_calendar_config.json` with a dedicated test calendar ID.
 
 Generate an OAuth URL:
 
@@ -77,6 +84,27 @@ python main.py google smoke-test
 ```
 
 The smoke-test creates a temporary event, updates it, and deletes it.
+
+Create or reuse a dedicated Google Calendar for live synchronization:
+
+```bash
+python main.py google create-sync-calendar
+```
+
+Clear events from that dedicated calendar:
+
+```bash
+python main.py google clear-sync-calendar
+```
+
+Run the JSON <-> Google integration demo:
+
+```bash
+python main.py google integration-demo
+```
+
+In live sync mode, Outlook and Yandex calendars still use JSON files, while
+`developer_2` uses the real Google Calendar API.
 
 ## Calendar Files
 

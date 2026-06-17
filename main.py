@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import argparse
 
-from app.bootstrap import build_database, build_file_adapters
+from app.bootstrap import build_database, build_sync_adapters
 from app.config import PROJECT_ROOT, ensure_project_dirs
 from app.logger import configure_logger
 from app.services.demo import run_demo
+from app.services.google_calendar_config import (
+    clear_sync_calendar,
+    create_sync_calendar,
+)
+from app.services.google_integration_demo import run_google_integration_demo
 from app.services.google_oauth import (
     build_calendar_service,
     create_authorization_url,
@@ -18,7 +23,12 @@ from app.services.sync_service import SyncService
 def main() -> None:
     parser = argparse.ArgumentParser(description="Calendar Sync Service prototype")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("sync", help="Synchronize JSON calendars")
+    sync_parser = subparsers.add_parser("sync", help="Synchronize calendars")
+    sync_parser.add_argument(
+        "--real-google",
+        action="store_true",
+        help="Use real Google Calendar instead of google_developer_2.json",
+    )
     subparsers.add_parser("demo", help="Run deterministic demo scenario")
 
     google_parser = subparsers.add_parser("google", help="Google Calendar tools")
@@ -37,6 +47,18 @@ def main() -> None:
         help="Create, update, and delete a temporary Google Calendar event",
     )
     smoke_parser.add_argument("--calendar-id", default="primary")
+    google_subparsers.add_parser(
+        "create-sync-calendar",
+        help="Create or reuse a dedicated Google sync calendar",
+    )
+    google_subparsers.add_parser(
+        "clear-sync-calendar",
+        help="Remove events from the dedicated Google sync calendar",
+    )
+    google_subparsers.add_parser(
+        "integration-demo",
+        help="Run JSON <-> Google live synchronization demo",
+    )
     args = parser.parse_args()
 
     if args.command == "demo":
@@ -70,10 +92,32 @@ def main() -> None:
             print(f"- deleted status: {result.deleted_status}")
             return
 
+        if args.google_command == "create-sync-calendar":
+            service = build_calendar_service(PROJECT_ROOT)
+            result = create_sync_calendar(service, root=PROJECT_ROOT)
+            action = "Created" if result.created else "Using existing"
+            print(f"{action} Google sync calendar:")
+            print(f"- summary: {result.config.summary}")
+            print(f"- calendar_id: {result.config.calendar_id}")
+            return
+
+        if args.google_command == "clear-sync-calendar":
+            service = build_calendar_service(PROJECT_ROOT)
+            deleted_count = clear_sync_calendar(service, root=PROJECT_ROOT)
+            print(f"Removed {deleted_count} events from Google sync calendar")
+            return
+
+        if args.google_command == "integration-demo":
+            run_google_integration_demo(PROJECT_ROOT)
+            return
+
     ensure_project_dirs(PROJECT_ROOT)
     logger = configure_logger(PROJECT_ROOT / "logs" / "sync.log")
     database = build_database(PROJECT_ROOT)
-    adapters = build_file_adapters(root=PROJECT_ROOT)
+    adapters = build_sync_adapters(
+        root=PROJECT_ROOT,
+        use_real_google=args.real_google,
+    )
     result = SyncService(
         adapters=adapters,
         database=database,

@@ -8,6 +8,7 @@ from app.models import CalendarEvent
 
 
 DEFAULT_TIMEZONE = "Asia/Yekaterinburg"
+SYNC_UPDATED_AT_KEY = "calendar_sync_updated_at"
 
 
 class GoogleEventMapper:
@@ -22,7 +23,8 @@ class GoogleEventMapper:
     ) -> CalendarEvent:
         start_time = self._parse_google_datetime(payload.get("start", {}))
         end_time = self._parse_google_datetime(payload.get("end", {}))
-        updated_raw = payload.get("updated")
+        private_properties = payload.get("extendedProperties", {}).get("private", {})
+        updated_raw = private_properties.get(SYNC_UPDATED_AT_KEY) or payload.get("updated")
         updated_at = (
             self._parse_datetime(updated_raw)
             if updated_raw
@@ -68,6 +70,11 @@ class GoogleEventMapper:
                 "timeZone": self.timezone,
             },
             "status": status,
+            "extendedProperties": {
+                "private": {
+                    SYNC_UPDATED_AT_KEY: event.updated_at.isoformat(),
+                }
+            },
         }
         email_attendees = [attendee for attendee in event.attendees if "@" in attendee]
         if email_attendees:
@@ -82,7 +89,11 @@ class GoogleEventMapper:
 
     def _parse_datetime(self, value: str) -> datetime:
         normalized = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
+        timezone = ZoneInfo(self.timezone)
+        if parsed.tzinfo is None:
+            return parsed
+        return parsed.astimezone(timezone).replace(tzinfo=None)
 
     def _format_google_datetime(self, value: datetime) -> str:
         if value.tzinfo is None:
