@@ -47,6 +47,18 @@ Run synchronization with a real Google Calendar for `developer_2`:
 python main.py sync --real-google
 ```
 
+Run synchronization with a real Yandex Calendar for `developer_1`:
+
+```bash
+python main.py sync --real-yandex
+```
+
+Google and Yandex live adapters can be enabled together:
+
+```bash
+python main.py sync --real-google --real-yandex
+```
+
 Run the deterministic demo scenario:
 
 ```bash
@@ -105,6 +117,51 @@ python main.py google integration-demo
 
 In live sync mode, Outlook and Yandex calendars still use JSON files, while
 `developer_2` uses the real Google Calendar API.
+
+## Yandex Calendar CalDAV
+
+The Yandex adapter uses CalDAV. Create a local `.env` file from `.env.example`:
+
+```env
+YANDEX_CALDAV_URL=https://caldav.yandex.ru
+YANDEX_USERNAME=Bebrono@yandex.ru
+YANDEX_APP_PASSWORD=<yandex_app_password>
+```
+
+Use a Yandex app password, not the main account password. The `.env` file is ignored by Git.
+
+Check authentication:
+
+```bash
+python main.py yandex check-auth
+```
+
+Create or reuse a dedicated Yandex Calendar for live synchronization:
+
+```bash
+python main.py yandex create-sync-calendar
+```
+
+Clear events from that dedicated calendar:
+
+```bash
+python main.py yandex clear-sync-calendar
+```
+
+Run a live CRUD smoke-test:
+
+```bash
+python main.py yandex smoke-test
+```
+
+Run the JSON <-> Yandex integration demo:
+
+```bash
+python main.py yandex integration-demo
+```
+
+In Yandex live sync mode, `developer_1` uses real Yandex Calendar via CalDAV,
+while `leader` still uses the JSON file adapter.
 
 ## Calendar Files
 

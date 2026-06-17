@@ -1,5 +1,11 @@
 from app.adapters.base import CalendarAdapter
 from app.adapters.file_calendar_adapter import FileCalendarAdapter
 from app.adapters.google_calendar_adapter import GoogleCalendarAdapter
+from app.adapters.yandex_calendar_adapter import YandexCalendarAdapter
 
-__all__ = ["CalendarAdapter", "FileCalendarAdapter", "GoogleCalendarAdapter"]
+__all__ = [
+    "CalendarAdapter",
+    "FileCalendarAdapter",
+    "GoogleCalendarAdapter",
+    "YandexCalendarAdapter",
+]

@@ -18,6 +18,14 @@ from app.services.google_oauth import (
 )
 from app.services.google_smoke_test import run_google_smoke_test
 from app.services.sync_service import SyncService
+from app.services.yandex_calendar_config import (
+    build_yandex_client,
+    clear_sync_calendar as clear_yandex_sync_calendar,
+    create_sync_calendar as create_yandex_sync_calendar,
+    load_sync_calendar as load_yandex_sync_calendar,
+)
+from app.services.yandex_integration_demo import run_yandex_integration_demo
+from app.services.yandex_smoke_test import run_yandex_smoke_test
 
 
 def main() -> None:
@@ -28,6 +36,11 @@ def main() -> None:
         "--real-google",
         action="store_true",
         help="Use real Google Calendar instead of google_developer_2.json",
+    )
+    sync_parser.add_argument(
+        "--real-yandex",
+        action="store_true",
+        help="Use real Yandex Calendar instead of yandex_developer_1.json",
     )
     subparsers.add_parser("demo", help="Run deterministic demo scenario")
 
@@ -58,6 +71,29 @@ def main() -> None:
     google_subparsers.add_parser(
         "integration-demo",
         help="Run JSON <-> Google live synchronization demo",
+    )
+
+    yandex_parser = subparsers.add_parser("yandex", help="Yandex Calendar tools")
+    yandex_subparsers = yandex_parser.add_subparsers(
+        dest="yandex_command",
+        required=True,
+    )
+    yandex_subparsers.add_parser("check-auth", help="Check Yandex CalDAV auth")
+    yandex_subparsers.add_parser(
+        "create-sync-calendar",
+        help="Create or reuse a dedicated Yandex sync calendar",
+    )
+    yandex_subparsers.add_parser(
+        "clear-sync-calendar",
+        help="Remove events from the dedicated Yandex sync calendar",
+    )
+    yandex_subparsers.add_parser(
+        "smoke-test",
+        help="Create, update, and soft-delete a temporary Yandex Calendar event",
+    )
+    yandex_subparsers.add_parser(
+        "integration-demo",
+        help="Run JSON <-> Yandex live synchronization demo",
     )
     args = parser.parse_args()
 
@@ -111,12 +147,50 @@ def main() -> None:
             run_google_integration_demo(PROJECT_ROOT)
             return
 
+    if args.command == "yandex":
+        if args.yandex_command == "check-auth":
+            client = build_yandex_client(PROJECT_ROOT)
+            calendars = client.principal().calendars()
+            print(f"Yandex CalDAV auth OK, calendars found: {len(calendars)}")
+            return
+
+        if args.yandex_command == "create-sync-calendar":
+            client = build_yandex_client(PROJECT_ROOT)
+            result = create_yandex_sync_calendar(client, root=PROJECT_ROOT)
+            action = "Created" if result.created else "Using existing"
+            print(f"{action} Yandex sync calendar:")
+            print(f"- name: {result.config.name}")
+            print(f"- calendar_url: {result.config.calendar_url}")
+            return
+
+        if args.yandex_command == "clear-sync-calendar":
+            client = build_yandex_client(PROJECT_ROOT)
+            deleted_count = clear_yandex_sync_calendar(client, root=PROJECT_ROOT)
+            print(f"Removed {deleted_count} events from Yandex sync calendar")
+            return
+
+        if args.yandex_command == "smoke-test":
+            client = build_yandex_client(PROJECT_ROOT)
+            calendar = load_yandex_sync_calendar(client, root=PROJECT_ROOT)
+            result = run_yandex_smoke_test(calendar)
+            print("Yandex Calendar smoke-test complete:")
+            print(f"- created event id: {result.created_event_id}")
+            print(f"- created title: {result.created_title}")
+            print(f"- updated title: {result.updated_title}")
+            print(f"- deleted status: {result.deleted_status}")
+            return
+
+        if args.yandex_command == "integration-demo":
+            run_yandex_integration_demo(PROJECT_ROOT)
+            return
+
     ensure_project_dirs(PROJECT_ROOT)
     logger = configure_logger(PROJECT_ROOT / "logs" / "sync.log")
     database = build_database(PROJECT_ROOT)
     adapters = build_sync_adapters(
         root=PROJECT_ROOT,
         use_real_google=args.real_google,
+        use_real_yandex=args.real_yandex,
     )
     result = SyncService(
         adapters=adapters,

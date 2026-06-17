@@ -2,10 +2,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .codex-remote-attachments/
+.env
 .venv/
 venv/
 data/sync.db
 data/google_token.json
 data/google_oauth_state.json
 data/google_calendar_config.json
+data/yandex_calendar_config.json
 logs/*.log
