@@ -5,6 +5,8 @@ __pycache__/
 .env
 .venv/
 venv/
+client_secret_*.json
+credentials.json
 data/sync.db
 data/google_token.json
 data/google_oauth_state.json

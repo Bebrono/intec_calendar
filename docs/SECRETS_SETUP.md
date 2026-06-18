@@ -13,6 +13,8 @@ python main.py live-demo
 Эти файлы нужны для live-режима, но не коммитятся:
 
 - `.env`;
+- `client_secret_*.json`;
+- `credentials.json`;
 - `data/google_token.json`;
 - `data/google_calendar_config.json`;
 - `data/yandex_calendar_config.json`;
@@ -23,10 +25,16 @@ python main.py live-demo
 
 ## Google Calendar
 
-В репозитории должен быть OAuth client файл:
+OAuth client файл Google не должен лежать в репозитории. Если нужно заново пройти авторизацию, положите его локально в корень проекта:
 
 ```text
 client_secret_*.json
+```
+
+или:
+
+```text
+credentials.json
 ```
 
 Если Google OAuth еще не пройден:
@@ -52,6 +60,8 @@ python main.py google auth-finish "http://localhost/?state=...&code=...&scope=..
 ```text
 data/google_token.json
 ```
+
+Для обычного запуска `python main.py live-demo` проверяющему достаточно готового `data/google_token.json`. OAuth client файл нужен только для повторной авторизации.
 
 Создать или переиспользовать тестовый календарь:
 
@@ -114,3 +124,10 @@ LIVE DEMO PASSED
 ```
 
 Если команда проходит, проверяющий сможет запустить тот же сценарий без ручной настройки.
+
+Если проверка запускается на другой машине, передайте приватно:
+
+- `.env`;
+- `data/google_token.json`.
+
+Файлы `data/google_calendar_config.json` и `data/yandex_calendar_config.json` можно не передавать: `live-demo` создаст или обновит тестовые календари сам.
