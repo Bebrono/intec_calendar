@@ -17,6 +17,11 @@ from app.services.google_oauth import (
     finish_authorization,
 )
 from app.services.google_smoke_test import run_google_smoke_test
+from app.services.live_demo import (
+    LiveDemoError,
+    LiveDemoPrerequisiteError,
+    run_live_demo,
+)
 from app.services.sync_service import SyncService
 from app.services.yandex_calendar_config import (
     build_yandex_client,
@@ -43,6 +48,10 @@ def main() -> None:
         help="Use real Yandex Calendar instead of yandex_developer_1.json",
     )
     subparsers.add_parser("demo", help="Run deterministic demo scenario")
+    subparsers.add_parser(
+        "live-demo",
+        help="Run Google + Yandex live verification scenario",
+    )
 
     google_parser = subparsers.add_parser("google", help="Google Calendar tools")
     google_subparsers = google_parser.add_subparsers(
@@ -99,6 +108,19 @@ def main() -> None:
 
     if args.command == "demo":
         run_demo(PROJECT_ROOT)
+        return
+
+    if args.command == "live-demo":
+        try:
+            run_live_demo(PROJECT_ROOT)
+        except LiveDemoPrerequisiteError as exc:
+            print("LIVE DEMO CANNOT START")
+            print(f"- {exc}")
+            raise SystemExit(2) from None
+        except LiveDemoError as exc:
+            print("LIVE DEMO FAILED")
+            print(f"- {exc}")
+            raise SystemExit(1) from None
         return
 
     if args.command == "google":
