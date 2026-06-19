@@ -8,6 +8,7 @@ from app.models import CalendarEvent
 from app.services.google_calendar_config import (
     GoogleCalendarConfig,
     create_sync_calendar,
+    deduplicate_sync_calendars,
     recreate_sync_calendar,
     save_sync_calendar_config,
 )
@@ -24,6 +25,56 @@ def test_create_sync_calendar_saves_config(tmp_path):
     assert result.config.summary == "Test Sync Calendar"
     assert result.config.calendar_id == "calendar_1"
     assert (tmp_path / "data" / "google_calendar_config.json").exists()
+
+
+def test_create_sync_calendar_reuses_existing_calendar_by_summary(tmp_path):
+    service = FakeGoogleService()
+    service.calendars_resource.items["existing_calendar"] = {
+        "id": "existing_calendar",
+        "summary": "Test Sync Calendar",
+    }
+
+    result = create_sync_calendar(service, root=tmp_path, summary="Test Sync Calendar")
+
+    assert result.created is False
+    assert result.config.calendar_id == "existing_calendar"
+    assert len(service.calendars_resource.items) == 1
+
+
+def test_deduplicate_sync_calendars_removes_extra_google_calendars(tmp_path):
+    service = FakeGoogleService()
+    service.calendars_resource.items.update(
+        {
+            "keep_calendar": {
+                "id": "keep_calendar",
+                "summary": "Test Sync Calendar",
+            },
+            "duplicate_calendar": {
+                "id": "duplicate_calendar",
+                "summary": "Test Sync Calendar",
+            },
+            "other_calendar": {
+                "id": "other_calendar",
+                "summary": "Other Calendar",
+            },
+        }
+    )
+    save_sync_calendar_config(
+        GoogleCalendarConfig(calendar_id="keep_calendar", summary="Test Sync Calendar"),
+        tmp_path,
+    )
+
+    result = deduplicate_sync_calendars(
+        service,
+        root=tmp_path,
+        summary="Test Sync Calendar",
+    )
+
+    assert result.config.calendar_id == "keep_calendar"
+    assert result.deleted_count == 1
+    assert "keep_calendar" in service.calendars_resource.items
+    assert "duplicate_calendar" not in service.calendars_resource.items
+    assert "other_calendar" in service.calendars_resource.items
 
 
 def test_recreate_sync_calendar_replaces_existing_config(tmp_path):
@@ -118,6 +169,9 @@ class FakeGoogleService:
     def calendars(self):
         return self.calendars_resource
 
+    def calendarList(self):
+        return self.calendars_resource
+
 
 class FakeCalendarsResource:
     def __init__(self):
@@ -134,6 +188,12 @@ class FakeCalendarsResource:
     def delete(self, *, calendarId):
         self.items.pop(calendarId, None)
         return FakeRequest({})
+
+    def list(self, **kwargs):
+        return FakeRequest({"items": list(self.items.values())})
+
+    def list_next(self, request, response):
+        return None
 
 
 class FakeEventsResource:

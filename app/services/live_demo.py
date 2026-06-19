@@ -14,7 +14,7 @@ from app.config import CALENDAR_ACCOUNTS, PROJECT_ROOT, ensure_project_dirs
 from app.models import CalendarEvent
 from app.services.google_calendar_config import (
     clear_sync_calendar as clear_google_sync_calendar,
-    create_sync_calendar as create_google_sync_calendar,
+    deduplicate_sync_calendars as deduplicate_google_sync_calendars,
     load_sync_calendar_config as load_google_sync_calendar_config,
 )
 from app.services.google_oauth import TOKEN_PATH, build_calendar_service
@@ -87,7 +87,7 @@ def check_live_demo_prerequisites(root: Path = PROJECT_ROOT) -> None:
 
 def prepare_live_calendars(root: Path = PROJECT_ROOT) -> None:
     google_service = build_calendar_service(root)
-    create_google_sync_calendar(google_service, root=root)
+    deduplicate_google_sync_calendars(google_service, root=root)
     clear_google_sync_calendar(google_service, root=root)
 
     yandex_client = build_yandex_client(root)
@@ -243,6 +243,7 @@ def run_live_demo(
         enabled=visual,
         pause_callback=pause_callback or default_visual_pause,
     )
+    run_label = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     try:
         deps.prerequisite_checker(root)
@@ -251,9 +252,30 @@ def run_live_demo(
 
         print("Live demo setup: preparing clean JSON, Google, and Yandex calendars")
 
-        _run_json_to_live_scenario(root, deps, database, logger, visual_guide)
-        _run_google_to_all_scenario(root, deps, database, logger, visual_guide)
-        _run_yandex_to_all_scenario(root, deps, database, logger, visual_guide)
+        _run_json_to_live_scenario(
+            root,
+            deps,
+            database,
+            logger,
+            visual_guide,
+            run_label,
+        )
+        _run_google_to_all_scenario(
+            root,
+            deps,
+            database,
+            logger,
+            visual_guide,
+            run_label,
+        )
+        _run_yandex_to_all_scenario(
+            root,
+            deps,
+            database,
+            logger,
+            visual_guide,
+            run_label,
+        )
 
     except LiveDemoError:
         raise
@@ -278,6 +300,7 @@ def _run_json_to_live_scenario(
     database: Database,
     logger: logging.Logger,
     visual: VisualGuide,
+    run_label: str,
 ) -> None:
     print("\nScenario 1: Outlook JSON -> Google + Yandex")
     adapters = _reset_and_build_adapters(root, deps, database)
@@ -286,11 +309,13 @@ def _run_json_to_live_scenario(
     google = _find_adapter(adapters, owner="developer_2", system="google")
     yandex = _find_adapter(adapters, owner="developer_1", system="yandex")
     leader = _find_adapter(adapters, owner="leader", system="yandex")
+    created_title = f"Live Demo Outlook to Google and Yandex [{run_label}]"
+    updated_title = f"Live Demo Outlook Updated [{run_label}]"
 
     manager.create_event(
         _event(
             event_id="live_demo_outlook_1",
-            title="Live Demo Outlook to Google and Yandex",
+            title=created_title,
             description="Created in Outlook JSON calendar",
             organizer="manager",
             source_system="outlook",
@@ -301,36 +326,34 @@ def _run_json_to_live_scenario(
         )
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(google, "Live Demo Outlook to Google and Yandex")
-    _assert_confirmed(yandex, "Live Demo Outlook to Google and Yandex")
-    _assert_confirmed(leader, "Live Demo Outlook to Google and Yandex")
+    _assert_confirmed(google, created_title)
+    _assert_confirmed(yandex, created_title)
+    _assert_confirmed(leader, created_title)
     print("- created Google and Yandex copies from Outlook JSON")
     visual.pause(
-        "Check Google and Yandex: event "
-        "'Live Demo Outlook to Google and Yandex' should be visible."
+        f"Check Google and Yandex: event {created_title!r} should be visible."
     )
 
     _update_event_title(
         manager,
-        "Live Demo Outlook to Google and Yandex",
-        "Live Demo Outlook Updated",
+        created_title,
+        updated_title,
         datetime(2026, 7, 1, 9, 30, 0),
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(google, "Live Demo Outlook Updated")
-    _assert_confirmed(yandex, "Live Demo Outlook Updated")
-    _assert_confirmed(leader, "Live Demo Outlook Updated")
+    _assert_confirmed(google, updated_title)
+    _assert_confirmed(yandex, updated_title)
+    _assert_confirmed(leader, updated_title)
     print("- propagated Outlook JSON update")
     visual.pause(
-        "Check Google and Yandex: the event title should now be "
-        "'Live Demo Outlook Updated'."
+        f"Check Google and Yandex: the event title should now be {updated_title!r}."
     )
 
-    _mark_deleted(manager, "Live Demo Outlook Updated", datetime(2026, 7, 1, 10, 0, 0))
+    _mark_deleted(manager, updated_title, datetime(2026, 7, 1, 10, 0, 0))
     _sync(adapters, database, logger)
-    _assert_deleted(google, "Live Demo Outlook Updated")
-    _assert_deleted(yandex, "Live Demo Outlook Updated")
-    _assert_deleted(leader, "Live Demo Outlook Updated")
+    _assert_deleted(google, updated_title)
+    _assert_deleted(yandex, updated_title)
+    _assert_deleted(leader, updated_title)
     print("- propagated Outlook JSON deletion")
     visual.pause(
         "Check Google and Yandex: the event should be deleted or marked cancelled."
@@ -343,6 +366,7 @@ def _run_google_to_all_scenario(
     database: Database,
     logger: logging.Logger,
     visual: VisualGuide,
+    run_label: str,
 ) -> None:
     print("\nScenario 2: Google -> Yandex + JSON")
     adapters = _reset_and_build_adapters(root, deps, database)
@@ -350,11 +374,13 @@ def _run_google_to_all_scenario(
     yandex = _find_adapter(adapters, owner="developer_1", system="yandex")
     manager = _find_adapter(adapters, owner="manager", system="outlook")
     leader = _find_adapter(adapters, owner="leader", system="yandex")
+    created_title = f"Live Demo Google to Everyone [{run_label}]"
+    updated_title = f"Live Demo Google Updated [{run_label}]"
 
     created = google.create_event(
         _event(
             event_id="",
-            title="Live Demo Google to Everyone",
+            title=created_title,
             description="Created in Google test calendar",
             organizer="developer_2",
             source_system="google",
@@ -365,16 +391,15 @@ def _run_google_to_all_scenario(
         )
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(yandex, "Live Demo Google to Everyone")
-    _assert_confirmed(manager, "Live Demo Google to Everyone")
-    _assert_confirmed(leader, "Live Demo Google to Everyone")
+    _assert_confirmed(yandex, created_title)
+    _assert_confirmed(manager, created_title)
+    _assert_confirmed(leader, created_title)
 
     _sync(adapters, database, logger)
-    _assert_single_confirmed_event(adapters, "Live Demo Google to Everyone")
+    _assert_single_confirmed_event(adapters, created_title)
     print("- created Yandex and JSON copies without duplicates")
     visual.pause(
-        "Check Yandex and JSON files: event "
-        "'Live Demo Google to Everyone' should be copied from Google."
+        f"Check Yandex and JSON files: event {created_title!r} should be copied from Google."
     )
 
     current = _find_event_by_id(google, created.id)
@@ -382,26 +407,25 @@ def _run_google_to_all_scenario(
         current.id,
         current.model_copy(
             update={
-                "title": "Live Demo Google Updated",
+                "title": updated_title,
                 "updated_at": datetime(2026, 7, 2, 9, 30, 0),
             }
         ),
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(yandex, "Live Demo Google Updated")
-    _assert_confirmed(manager, "Live Demo Google Updated")
-    _assert_confirmed(leader, "Live Demo Google Updated")
+    _assert_confirmed(yandex, updated_title)
+    _assert_confirmed(manager, updated_title)
+    _assert_confirmed(leader, updated_title)
     print("- propagated Google update")
     visual.pause(
-        "Check Yandex and JSON files: the Google event should now be "
-        "'Live Demo Google Updated'."
+        f"Check Yandex and JSON files: the Google event should now be {updated_title!r}."
     )
 
     google.delete_event(created.id)
     _sync(adapters, database, logger)
-    _assert_deleted(yandex, "Live Demo Google Updated")
-    _assert_deleted(manager, "Live Demo Google Updated")
-    _assert_deleted(leader, "Live Demo Google Updated")
+    _assert_deleted(yandex, updated_title)
+    _assert_deleted(manager, updated_title)
+    _assert_deleted(leader, updated_title)
     print("- propagated Google deletion")
     visual.pause(
         "Check Yandex and JSON files: the Google-origin event should be deleted."
@@ -414,6 +438,7 @@ def _run_yandex_to_all_scenario(
     database: Database,
     logger: logging.Logger,
     visual: VisualGuide,
+    run_label: str,
 ) -> None:
     print("\nScenario 3: Yandex -> Google + JSON")
     adapters = _reset_and_build_adapters(root, deps, database)
@@ -421,11 +446,13 @@ def _run_yandex_to_all_scenario(
     google = _find_adapter(adapters, owner="developer_2", system="google")
     manager = _find_adapter(adapters, owner="manager", system="outlook")
     leader = _find_adapter(adapters, owner="leader", system="yandex")
+    created_title = f"Live Demo Yandex to Everyone [{run_label}]"
+    updated_title = f"Live Demo Yandex Updated [{run_label}]"
 
     created = yandex.create_event(
         _event(
             event_id="",
-            title="Live Demo Yandex to Everyone",
+            title=created_title,
             description="Created in Yandex test calendar",
             organizer="developer_1",
             source_system="yandex",
@@ -436,16 +463,15 @@ def _run_yandex_to_all_scenario(
         )
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(google, "Live Demo Yandex to Everyone")
-    _assert_confirmed(manager, "Live Demo Yandex to Everyone")
-    _assert_confirmed(leader, "Live Demo Yandex to Everyone")
+    _assert_confirmed(google, created_title)
+    _assert_confirmed(manager, created_title)
+    _assert_confirmed(leader, created_title)
 
     _sync(adapters, database, logger)
-    _assert_single_confirmed_event(adapters, "Live Demo Yandex to Everyone")
+    _assert_single_confirmed_event(adapters, created_title)
     print("- created Google and JSON copies without duplicates")
     visual.pause(
-        "Check Google and JSON files: event "
-        "'Live Demo Yandex to Everyone' should be copied from Yandex."
+        f"Check Google and JSON files: event {created_title!r} should be copied from Yandex."
     )
 
     current = _find_event_by_id(yandex, created.id)
@@ -453,26 +479,25 @@ def _run_yandex_to_all_scenario(
         current.id,
         current.model_copy(
             update={
-                "title": "Live Demo Yandex Updated",
+                "title": updated_title,
                 "updated_at": datetime(2026, 7, 3, 9, 30, 0),
             }
         ),
     )
     _sync(adapters, database, logger)
-    _assert_confirmed(google, "Live Demo Yandex Updated")
-    _assert_confirmed(manager, "Live Demo Yandex Updated")
-    _assert_confirmed(leader, "Live Demo Yandex Updated")
+    _assert_confirmed(google, updated_title)
+    _assert_confirmed(manager, updated_title)
+    _assert_confirmed(leader, updated_title)
     print("- propagated Yandex update")
     visual.pause(
-        "Check Google and JSON files: the Yandex event should now be "
-        "'Live Demo Yandex Updated'."
+        f"Check Google and JSON files: the Yandex event should now be {updated_title!r}."
     )
 
     yandex.delete_event(created.id)
     _sync(adapters, database, logger)
-    _assert_deleted(google, "Live Demo Yandex Updated")
-    _assert_deleted(manager, "Live Demo Yandex Updated")
-    _assert_deleted(leader, "Live Demo Yandex Updated")
+    _assert_deleted(google, updated_title)
+    _assert_deleted(manager, updated_title)
+    _assert_deleted(leader, updated_title)
     print("- propagated Yandex deletion")
     visual.pause(
         "Check Google and JSON files: the Yandex-origin event should be deleted."

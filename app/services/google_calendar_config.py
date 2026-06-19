@@ -25,6 +25,12 @@ class GoogleCalendarCreationResult:
     created: bool
 
 
+@dataclass(frozen=True)
+class GoogleCalendarDeduplicationResult:
+    config: GoogleCalendarConfig
+    deleted_count: int
+
+
 def recreate_sync_calendar(
     service,
     *,
@@ -53,6 +59,15 @@ def create_sync_calendar(
     if existing is not None:
         return GoogleCalendarCreationResult(config=existing, created=False)
 
+    existing_calendars = find_sync_calendars(service, summary=summary)
+    if existing_calendars:
+        config = GoogleCalendarConfig(
+            calendar_id=existing_calendars[0].calendar_id,
+            summary=existing_calendars[0].summary,
+        )
+        save_sync_calendar_config(config, root)
+        return GoogleCalendarCreationResult(config=config, created=False)
+
     payload = (
         service.calendars()
         .insert(body={"summary": summary, "timeZone": DEFAULT_TIMEZONE})
@@ -66,6 +81,75 @@ def create_sync_calendar(
     return GoogleCalendarCreationResult(config=config, created=True)
 
 
+def deduplicate_sync_calendars(
+    service,
+    *,
+    root: Path = PROJECT_ROOT,
+    summary: str = DEFAULT_SYNC_CALENDAR_SUMMARY,
+) -> GoogleCalendarDeduplicationResult:
+    existing = find_sync_calendars(service, summary=summary)
+    if not existing:
+        created = create_sync_calendar(service, root=root, summary=summary)
+        return GoogleCalendarDeduplicationResult(
+            config=created.config,
+            deleted_count=0,
+        )
+
+    configured = load_sync_calendar_config(root, required=False)
+    keep = existing[0]
+    if configured is not None:
+        keep = next(
+            (
+                calendar
+                for calendar in existing
+                if calendar.calendar_id == configured.calendar_id
+            ),
+            keep,
+        )
+
+    deleted_count = 0
+    for calendar in existing:
+        if calendar.calendar_id == keep.calendar_id:
+            continue
+        try:
+            service.calendars().delete(calendarId=calendar.calendar_id).execute()
+            deleted_count += 1
+        except HttpError as exc:
+            if exc.resp.status not in (404, 410):
+                raise
+
+    save_sync_calendar_config(keep, root)
+    return GoogleCalendarDeduplicationResult(config=keep, deleted_count=deleted_count)
+
+
+def find_sync_calendars(
+    service,
+    *,
+    summary: str = DEFAULT_SYNC_CALENDAR_SUMMARY,
+) -> list[GoogleCalendarConfig]:
+    calendar_list_factory = getattr(service, "calendarList", None)
+    if calendar_list_factory is None:
+        return []
+
+    calendars = []
+    request = calendar_list_factory().list(
+        maxResults=250,
+        showDeleted=False,
+    )
+    while request is not None:
+        response = request.execute()
+        for item in response.get("items", []):
+            if item.get("summary") == summary and item.get("id"):
+                calendars.append(
+                    GoogleCalendarConfig(
+                        calendar_id=item["id"],
+                        summary=item.get("summary") or summary,
+                    )
+                )
+        request = calendar_list_factory().list_next(request, response)
+    return calendars
+
+
 def clear_sync_calendar(service, *, root: Path = PROJECT_ROOT) -> int:
     config = load_sync_calendar_config(root)
     deleted_count = 0
@@ -73,7 +157,7 @@ def clear_sync_calendar(service, *, root: Path = PROJECT_ROOT) -> int:
         calendarId=config.calendar_id,
         maxResults=2500,
         singleEvents=True,
-        showDeleted=True,
+        showDeleted=False,
     )
     while request is not None:
         response = request.execute()
