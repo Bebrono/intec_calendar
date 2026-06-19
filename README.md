@@ -24,7 +24,6 @@ Python-сервис синхронизации календарей команд
 ```powershell
 git clone https://github.com/Bebrono/intec_calendar.git
 cd intec_calendar
-git switch codex/calendar-sync-canonical-db
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
