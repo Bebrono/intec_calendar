@@ -150,9 +150,3 @@ uv run pytest
 - `docs/REVIEWER_GUIDE.md` - короткая инструкция для проверяющего.
 - `docs/SECRETS_SETUP.md` - подготовка `credentials.json` и `.env`.
 - `docs/ARCHITECTURE.md` - краткое описание архитектуры.
-- Google Calendar API Python quickstart:
-  <https://developers.google.com/workspace/calendar/api/quickstart/python>
-- Google OAuth consent и test users:
-  <https://developers.google.com/workspace/guides/configure-oauth-consent>
-- Yandex app passwords:
-  <https://yandex.com/support/id/authorization/app-passwords.html>
