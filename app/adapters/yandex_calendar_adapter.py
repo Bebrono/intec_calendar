@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from caldav import Calendar
 
 from app.adapters.base import CalendarAdapter
 from app.models import CalendarEvent
+from app.services.google_event_mapper import DEFAULT_TIMEZONE
 from app.services.yandex_event_mapper import YandexEventMapper
 
 
@@ -55,9 +58,16 @@ class YandexCalendarAdapter(CalendarAdapter):
     def delete_event(self, event_id: str) -> CalendarEvent:
         remote_event = self.calendar.event_by_uid(event_id)
         calendar_event = self.mapper.from_ical(remote_event.data, source_owner=self.owner)
-        deleted = calendar_event.model_copy(update={"status": "deleted"})
-        remote_event.data = self.mapper.to_ical(deleted)
-        remote_event.save(no_create=True)
+        deleted = calendar_event.model_copy(
+            update={
+                "status": "deleted",
+                "updated_at": datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).replace(
+                    microsecond=0,
+                    tzinfo=None,
+                ),
+            }
+        )
+        remote_event.delete()
         return deleted
 
     def _generate_event_id(self) -> str:

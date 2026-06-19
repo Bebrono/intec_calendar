@@ -25,10 +25,12 @@ from app.services.live_demo import (
     run_live_demo,
 )
 from app.services.sync_service import SyncService
+from app.services.watch_service import WatchPrerequisiteError, run_watch
 from app.services.yandex_calendar_config import (
+    YANDEX_SYNC_OWNERS,
     build_yandex_client,
     clear_sync_calendar as clear_yandex_sync_calendar,
-    create_sync_calendar as create_yandex_sync_calendar,
+    deduplicate_sync_calendars as deduplicate_yandex_sync_calendars,
     load_sync_calendar as load_yandex_sync_calendar,
 )
 from app.services.yandex_integration_demo import run_yandex_integration_demo
@@ -47,7 +49,18 @@ def main() -> None:
     sync_parser.add_argument(
         "--real-yandex",
         action="store_true",
-        help="Use real Yandex Calendar instead of yandex_developer_1.json",
+        help="Use real Yandex calendars instead of Yandex JSON files",
+    )
+    watch_parser = subparsers.add_parser(
+        "watch",
+        help="Synchronize live Google/Yandex calendars continuously",
+    )
+    watch_parser.add_argument(
+        "--interval",
+        type=int,
+        default=10,
+        choices=(5, 10, 30),
+        help="Seconds between synchronization cycles",
     )
     subparsers.add_parser("demo", help="Run deterministic demo scenario")
     live_demo_parser = subparsers.add_parser(
@@ -99,6 +112,12 @@ def main() -> None:
     )
 
     yandex_parser = subparsers.add_parser("yandex", help="Yandex Calendar tools")
+    yandex_parser.add_argument(
+        "--owner",
+        choices=YANDEX_SYNC_OWNERS,
+        default="developer_1",
+        help="Yandex calendar owner profile",
+    )
     yandex_subparsers = yandex_parser.add_subparsers(
         dest="yandex_command",
         required=True,
@@ -124,6 +143,15 @@ def main() -> None:
 
     if args.command == "demo":
         run_demo(PROJECT_ROOT)
+        return
+
+    if args.command == "watch":
+        try:
+            run_watch(PROJECT_ROOT, interval_seconds=args.interval)
+        except WatchPrerequisiteError as exc:
+            print("WATCH CANNOT START")
+            print(f"- {exc}")
+            raise SystemExit(2) from None
         return
 
     if args.command == "live-demo":
@@ -200,30 +228,48 @@ def main() -> None:
 
     if args.command == "yandex":
         if args.yandex_command == "check-auth":
-            client = build_yandex_client(PROJECT_ROOT)
+            client = build_yandex_client(PROJECT_ROOT, owner=args.owner)
             calendars = client.principal().calendars()
-            print(f"Yandex CalDAV auth OK, calendars found: {len(calendars)}")
+            print(
+                f"Yandex CalDAV auth OK for {args.owner}, "
+                f"calendars found: {len(calendars)}"
+            )
             return
 
         if args.yandex_command == "create-sync-calendar":
-            client = build_yandex_client(PROJECT_ROOT)
-            result = create_yandex_sync_calendar(client, root=PROJECT_ROOT)
-            action = "Created" if result.created else "Using existing"
-            print(f"{action} Yandex sync calendar:")
+            client = build_yandex_client(PROJECT_ROOT, owner=args.owner)
+            result = deduplicate_yandex_sync_calendars(
+                client,
+                root=PROJECT_ROOT,
+                owner=args.owner,
+            )
+            print(f"Using Yandex sync calendar for {args.owner}:")
             print(f"- name: {result.config.name}")
             print(f"- calendar_url: {result.config.calendar_url}")
+            print(f"- duplicate_calendars_removed: {result.deleted_count}")
             return
 
         if args.yandex_command == "clear-sync-calendar":
-            client = build_yandex_client(PROJECT_ROOT)
-            deleted_count = clear_yandex_sync_calendar(client, root=PROJECT_ROOT)
-            print(f"Removed {deleted_count} events from Yandex sync calendar")
+            client = build_yandex_client(PROJECT_ROOT, owner=args.owner)
+            deleted_count = clear_yandex_sync_calendar(
+                client,
+                root=PROJECT_ROOT,
+                owner=args.owner,
+            )
+            print(
+                f"Removed {deleted_count} events from "
+                f"Yandex sync calendar for {args.owner}"
+            )
             return
 
         if args.yandex_command == "smoke-test":
-            client = build_yandex_client(PROJECT_ROOT)
-            calendar = load_yandex_sync_calendar(client, root=PROJECT_ROOT)
-            result = run_yandex_smoke_test(calendar)
+            client = build_yandex_client(PROJECT_ROOT, owner=args.owner)
+            calendar = load_yandex_sync_calendar(
+                client,
+                root=PROJECT_ROOT,
+                owner=args.owner,
+            )
+            result = run_yandex_smoke_test(calendar, owner=args.owner)
             print("Yandex Calendar smoke-test complete:")
             print(f"- created event id: {result.created_event_id}")
             print(f"- created title: {result.created_title}")

@@ -19,8 +19,12 @@ class YandexSmokeTestResult:
     deleted_status: str
 
 
-def run_yandex_smoke_test(calendar: Calendar) -> YandexSmokeTestResult:
-    adapter = YandexCalendarAdapter(calendar=calendar)
+def run_yandex_smoke_test(
+    calendar: Calendar,
+    *,
+    owner: str = "developer_1",
+) -> YandexSmokeTestResult:
+    adapter = YandexCalendarAdapter(calendar=calendar, owner=owner)
     now = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).replace(microsecond=0, tzinfo=None)
     start_time = now + timedelta(days=1)
     end_time = start_time + timedelta(minutes=30)

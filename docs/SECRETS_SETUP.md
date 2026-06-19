@@ -1,31 +1,46 @@
 # Подготовка секретов и тестовых календарей
 
-Этот документ нужен владельцу проекта, который готовит машину для live-проверки.
+Этот документ нужен владельцу проекта. Проверяющему обычно достаточно получить
+готовые локальные файлы из раздела "Что передать проверяющему".
 
-Проверяющий не должен выполнять эти шаги вручную. Его команда:
+## Что передать проверяющему
 
-```powershell
-python main.py live-demo
-```
-
-## Что хранится локально
-
-Эти файлы нужны для live-режима, но не коммитятся:
+Эти файлы не коммитятся в Git и передаются отдельно безопасным способом:
 
 - `.env`;
-- `client_secret_*.json`;
-- `credentials.json`;
 - `data/google_token.json`;
 - `data/google_calendar_config.json`;
 - `data/yandex_calendar_config.json`;
-- `data/sync.db`;
-- `logs/sync.log`.
+- `data/yandex_leader_calendar_config.json`.
 
-Они перечислены в `.gitignore`.
+Не нужно передавать:
 
-## Google Calendar
+- `data/sync.db` - база будет создана автоматически;
+- `logs/sync.log` - лог будет создан автоматически;
+- `data/output/*.json` - тестовые JSON-календари создаются и очищаются командами проекта.
 
-OAuth client файл Google не должен лежать в репозитории. Если нужно заново пройти авторизацию, положите его локально в корень проекта:
+## Yandex
+
+Нужны пароли приложений Yandex, а не обычные пароли от почты.
+
+Пример `.env`:
+
+```env
+YANDEX_CALDAV_URL=https://caldav.yandex.ru
+
+YANDEX_USERNAME=Bebrono@yandex.ru
+YANDEX_APP_PASSWORD=developer_1_app_password
+
+YANDEX_LEADER_USERNAME=siskosardelkin@yandex.ru
+YANDEX_LEADER_APP_PASSWORD=leader_app_password
+```
+
+## Google
+
+Если `data/google_token.json` уже подготовлен, проверяющему не нужно заново
+проходить OAuth.
+
+Если OAuth нужно пройти с нуля, положите в корень проекта Google OAuth client:
 
 ```text
 client_secret_*.json
@@ -37,7 +52,7 @@ client_secret_*.json
 credentials.json
 ```
 
-Если Google OAuth еще не пройден:
+Далее:
 
 ```powershell
 python main.py google auth-url
@@ -49,65 +64,24 @@ python main.py google auth-url
 http://localhost/?state=...&code=...&scope=...
 ```
 
-Затем:
+Завершите авторизацию:
 
 ```powershell
 python main.py google auth-finish "http://localhost/?state=...&code=...&scope=..."
 ```
 
-После этого появится локальный файл:
+## Подготовка тестовых календарей
 
-```text
-data/google_token.json
-```
-
-Для обычного запуска `python main.py live-demo` проверяющему достаточно готового `data/google_token.json`. OAuth client файл нужен только для повторной авторизации.
-
-Создать или переиспользовать тестовый календарь:
+Основная команда:
 
 ```powershell
-python main.py google create-sync-calendar
+python main.py live-links --prepare
 ```
 
-Проверить прямой CRUD:
+Она создает или находит тестовые Google/Yandex календари, очищает их и сохраняет
+локальные config-файлы в `data/`.
 
-```powershell
-python main.py google smoke-test
-```
-
-## Yandex Calendar
-
-Нужен пароль приложения Yandex, не основной пароль от почты.
-
-Создайте локальный `.env`:
-
-```env
-YANDEX_CALDAV_URL=https://caldav.yandex.ru
-YANDEX_USERNAME=Bebrono@yandex.ru
-YANDEX_APP_PASSWORD=your_yandex_app_password
-```
-
-Проверить авторизацию:
-
-```powershell
-python main.py yandex check-auth
-```
-
-Создать или переиспользовать тестовый календарь:
-
-```powershell
-python main.py yandex create-sync-calendar
-```
-
-Проверить прямой CRUD:
-
-```powershell
-python main.py yandex smoke-test
-```
-
-## Финальная проверка перед передачей
-
-На подготовленной машине выполните:
+Финальная проверка:
 
 ```powershell
 python main.py live-demo
@@ -122,26 +96,3 @@ LIVE DEMO PASSED
 - Google <-> Yandex sync OK
 - Duplicate protection OK
 ```
-
-Если команда проходит, проверяющий сможет запустить тот же сценарий без ручной настройки.
-
-Для визуальной проверки:
-
-```powershell
-python main.py live-demo --visual
-```
-
-Открытые ссылки видны только в браузере, где выполнен вход в Google/Yandex аккаунт с доступом к тестовым календарям.
-
-Для ручной проверки через браузер:
-
-```powershell
-python main.py live-links --prepare
-```
-
-Если проверка запускается на другой машине, передайте приватно:
-
-- `.env`;
-- `data/google_token.json`.
-
-Файлы `data/google_calendar_config.json` и `data/yandex_calendar_config.json` можно не передавать: `live-demo` создаст или обновит тестовые календари сам.

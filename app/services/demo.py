@@ -61,17 +61,9 @@ def run_demo(root: Path = PROJECT_ROOT) -> None:
     _print_calendar_state(adapters)
 
     event = _get_demo_event(manager_adapter)
-    manager_adapter.update_event(
-        event.id,
-        event.model_copy(
-            update={
-                "status": "deleted",
-                "updated_at": datetime(2026, 6, 15, 14, 0, 0),
-            }
-        ),
-    )
+    manager_adapter.delete_event(event.id)
 
-    print("\nDemo step 3: mark event as deleted and synchronize")
+    print("\nDemo step 3: delete event and synchronize")
     _run_sync(adapters, database, logger)
     _print_calendar_state(adapters)
 

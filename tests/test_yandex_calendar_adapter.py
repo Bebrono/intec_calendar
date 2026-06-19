@@ -28,11 +28,13 @@ def test_yandex_calendar_adapter_crud_with_fake_calendar():
     )
     events = adapter.get_events()
     deleted = adapter.delete_event(updated.id)
+    events_after_delete = adapter.get_events()
 
     assert created.id.startswith("yandex_developer_1_")
     assert updated.title == "Smoke test updated"
     assert [event.id for event in events] == [created.id]
     assert deleted.status == "deleted"
+    assert events_after_delete == []
 
 
 class FakeCalDAVCalendar:
