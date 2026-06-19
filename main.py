@@ -133,7 +133,7 @@ def main() -> None:
     )
     yandex_subparsers.add_parser(
         "smoke-test",
-        help="Create, update, and soft-delete a temporary Yandex Calendar event",
+        help="Create, update, and delete a temporary Yandex Calendar event",
     )
     yandex_subparsers.add_parser(
         "integration-demo",

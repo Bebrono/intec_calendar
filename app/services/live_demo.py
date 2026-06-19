@@ -190,7 +190,7 @@ def print_live_links(
     print("2. Open the Google and Yandex test calendar links.")
     print("3. Create, update, or delete an event in Google.")
     print("4. Wait up to 10 seconds and check the change in Yandex.")
-    print("5. Repeat the same flow from Yandex to Google.")
+    print("5. Repeat the same flow from Yandex to Google and JSON.")
     return links
 
 
@@ -378,7 +378,7 @@ def _run_json_to_live_scenario(
     _assert_deleted(leader, updated_title)
     print("- propagated Outlook JSON deletion")
     visual.pause(
-        "Check Google and Yandex: the event should be deleted or marked cancelled."
+        "Check Google and Yandex: the event should be deleted."
     )
 
 

@@ -8,11 +8,12 @@ Outlook manager.
 
 Откройте терминал в папке проекта. На Windows это можно сделать из Проводника:
 откройте папку проекта, кликните правой кнопкой по пустому месту и выберите
-`Открыть в Терминале`.
+`Открыть в Терминале` / `Open in Terminal`.
 
 ```powershell
 git clone https://github.com/Bebrono/intec_calendar.git
 cd intec_calendar
+git switch codex/calendar-sync-canonical-db
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -28,7 +29,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## 2. Локальные доступы
 
-В Git нет секретов. Владелец проекта должен передать отдельно:
+В Git нет секретов. Для быстрого запуска владелец проекта передает архив с:
 
 - `.env`;
 - `data/google_token.json`;
@@ -38,6 +39,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 Файлы нужно положить в те же относительные пути внутри проекта.
 
+Если проверяющий подключает свой Google-аккаунт, `data/google_token.json` ему
+передавать не надо. Нужен Google OAuth client JSON (`credentials.json` или
+`client_secret_*.json`), а Gmail проверяющего должен быть добавлен в Test users
+в Google Cloud, если OAuth приложение еще в Testing.
+
 ## 3. Автоматическая live-проверка
 
 ```powershell
@@ -45,7 +51,7 @@ python main.py live-demo
 ```
 
 Команда очищает тестовые календари, создает события из разных источников,
-проверяет создание, обновление, удаление и защиту от дублей.
+проверяет создание, обновление, hard delete и защиту от дублей.
 
 Ожидаемый результат:
 
@@ -73,7 +79,7 @@ python main.py watch
 python main.py live-links
 ```
 
-Если нужно сначала очистить тестовые календари:
+Если нужно сначала очистить тестовые календари и обновить config-файлы:
 
 ```powershell
 python main.py live-links --prepare
@@ -98,7 +104,8 @@ python main.py live-links --prepare
 ## 5. Если проверка не стартует
 
 Если вывод начинается с `LIVE DEMO CANNOT START` или `WATCH CANNOT START`,
-значит не хватает локальных доступов. Проверьте файлы из раздела 2.
+значит не хватает локальных доступов. Проверьте файлы из раздела 2 и подробную
+инструкцию в `docs/SECRETS_SETUP.md`.
 
 Логи пишутся в `logs/sync.log`, служебные записи синхронизации - в
 `data/sync.db`.
@@ -107,6 +114,12 @@ python main.py live-links --prepare
 
 ```powershell
 pytest
+```
+
+или:
+
+```powershell
+uv run pytest
 ```
 
 Ожидаемый результат: все тесты проходят.
