@@ -1,171 +1,101 @@
-# Подготовка секретов и тестовых календарей
+# Подготовка `credentials.json` и `.env`
 
-Этот документ нужен владельцу проекта и проверяющему, если он подключает свои
-Google/Yandex аккаунты. В Git секреты не коммитятся.
+В Git секреты не коммитятся. Для проверки проекта проверяющий получает только:
 
-## Что передать проверяющему
+- `credentials.json`;
+- `.env`.
 
-Если проверяющий должен запустить проект без самостоятельной настройки Google
-Cloud/Yandex, передайте безопасным способом:
+Все остальные служебные файлы создаются локально после Google авторизации и
+команды `python main.py live-links --prepare`.
 
-- `.env`;
-- `data/google_token.json`;
-- `data/google_calendar_config.json`;
-- `data/yandex_calendar_config.json`;
-- `data/yandex_leader_calendar_config.json`.
+## Google
 
-Эти файлы нельзя коммитить в Git. Их можно передавать только безопасным способом,
-если они нужны для проверки.
+Владелец проекта передает проверяющему файл:
 
-Не нужно передавать:
+```text
+credentials.json
+```
 
-- `data/sync.db` - база будет создана автоматически;
-- `logs/sync.log` - лог будет создан автоматически;
-- `data/output/*.json` - тестовые JSON-календари создаются и очищаются командами проекта;
-- `data/google_oauth_state.json` - временный файл незавершенного Google OAuth.
+Файл нужно положить в корень проекта, рядом с `main.py`.
 
-## Yandex: подключение пользователя
+Если Google OAuth приложение находится в режиме Testing, владелец проекта должен
+добавить Gmail проверяющего в Google Cloud OAuth Test users до запуска команд.
 
-Yandex работает через CalDAV. Для каждого Yandex-участника нужен логин аккаунта
-и пароль приложения. Обычный пароль от аккаунта не используйте.
+Проверяющий авторизуется под своей Gmail-почтой:
+
+```powershell
+python main.py google auth-url
+```
+
+Открыть ссылку из вывода, разрешить доступ к календарю и скопировать финальный
+URL из адресной строки:
+
+```text
+http://localhost/?state=...&code=...&scope=...
+```
+
+Если браузер показывает ошибку подключения к `localhost`, это нормально: код
+авторизации уже находится в адресной строке.
+
+```powershell
+python main.py google auth-finish "http://localhost/?state=...&code=...&scope=..."
+```
+
+После этого появится локальный файл `data/google_token.json`. Его не нужно
+пересылать владельцу проекта и не нужно коммитить.
+
+## Yandex
+
+Для каждого Yandex аккаунта, который участвует в проверке, проверяющий создает
+пароль приложения:
+
+1. Открыть <https://id.yandex.ru/>.
+2. Слева открыть `Безопасность`.
+3. Внизу страницы открыть `Пароли приложений`.
+4. Выбрать тип приложения `Календарь`.
+5. Ввести любое название, например `calendar-sync-review`.
+6. Скопировать созданный пароль приложения.
+7. Отправить владельцу проекта почту Yandex аккаунта и этот пароль приложения.
+
+Владелец проекта готовит `.env` и отправляет его проверяющему.
 
 Пример `.env`:
 
 ```env
 YANDEX_CALDAV_URL=https://caldav.yandex.ru
 
-YANDEX_USERNAME=Bebrono@yandex.ru
+YANDEX_USERNAME=developer-login@yandex.ru
 YANDEX_APP_PASSWORD=developer_1_app_password
 
-YANDEX_LEADER_USERNAME=siskosardelkin@yandex.ru
+YANDEX_LEADER_USERNAME=leader-login@yandex.ru
 YANDEX_LEADER_APP_PASSWORD=leader_app_password
 ```
 
-Соответствие переменных:
+Файл `.env` нужно положить в корень проекта, рядом с `main.py` и
+`credentials.json`.
 
-- `developer_1` читает `YANDEX_USERNAME` и `YANDEX_APP_PASSWORD`;
-- `leader` читает `YANDEX_LEADER_USERNAME` и `YANDEX_LEADER_APP_PASSWORD`.
+## Подготовка календарей
 
-Если подключаете другого Yandex пользователя или заменяете пароль приложения,
-удалите старые config-файлы:
-
-```powershell
-Remove-Item data\yandex_calendar_config.json -ErrorAction SilentlyContinue
-Remove-Item data\yandex_leader_calendar_config.json -ErrorAction SilentlyContinue
-```
-
-Затем создайте тестовые календари заново:
-
-```powershell
-python main.py yandex --owner developer_1 create-sync-calendar
-python main.py yandex --owner leader create-sync-calendar
-```
-
-Если нужно пересоздать/очистить все live-календари разом:
+После Google авторизации и добавления `.env` выполните:
 
 ```powershell
 python main.py live-links --prepare
 ```
 
-## Google: готовый токен владельца
+Команда создает или находит тестовый Google календарь и два Yandex календаря,
+очищает их, сохраняет локальные config-файлы в `data/` и печатает ссылки.
 
-Если проверяющему передали `data/google_token.json` и
-`data/google_calendar_config.json`, Google OAuth заново проходить не нужно.
-Команды `python main.py live-demo`, `python main.py watch` и
-`python main.py live-links` будут работать от имени аккаунта, который выдал этот
-токен.
+## Что не передавать и не коммитить
 
-Важно: Google-токен не является логином/паролем и привязан к конкретному Google
-аккаунту и OAuth client. Нельзя "подключить другого пользователя", просто
-заменив Gmail в `.env`.
-
-## Google: подключение другого Gmail к API
-
-1. В Google Cloud создайте или откройте проект.
-2. Включите Google Calendar API.
-3. Настройте OAuth consent screen. Если приложение в режиме Testing, добавьте
-   Gmail проверяющего в Test users.
-4. Создайте OAuth client типа Desktop app.
-5. Скачайте JSON клиента и положите в корень проекта одним из имен:
-
-```text
-credentials.json
-```
-
-или:
-
-```text
-client_secret_*.json
-```
-
-6. Удалите старое локальное состояние Google:
-
-```powershell
-Remove-Item data\google_token.json -ErrorAction SilentlyContinue
-Remove-Item data\google_oauth_state.json -ErrorAction SilentlyContinue
-Remove-Item data\google_calendar_config.json -ErrorAction SilentlyContinue
-```
-
-7. Сгенерируйте ссылку OAuth:
-
-```powershell
-python main.py google auth-url
-```
-
-8. Откройте ссылку под нужным Gmail и разрешите доступ к календарю. Приложение
-   просит scope `https://www.googleapis.com/auth/calendar` и
-   `https://www.googleapis.com/auth/calendar.events`.
-
-9. После разрешения Google перенаправит на URL вида:
-
-```text
-http://localhost/?state=...&code=...&scope=...
-```
-
-Если браузер показывает ошибку подключения к `localhost`, это нормально: локальный
-сервер не поднимается, а код авторизации уже находится в адресной строке.
-Скопируйте весь URL и выполните:
-
-```powershell
-python main.py google auth-finish "http://localhost/?state=...&code=...&scope=..."
-python main.py google create-sync-calendar
-```
-
-## Google: другой человек только редактирует календарь
-
-Если другому человеку нужно вручную создавать/изменять/удалять события в уже
-созданном Google тестовом календаре, отдельный API-токен ему не нужен.
-
-Владелец Google календаря должен открыть Google Calendar, найти календарь
-`Calendar Sync Service Test`, поделиться им с Gmail проверяющего и выдать право
-`Make changes to events` / `Вносить изменения в мероприятия`.
-
-## Подготовка тестовых календарей
-
-Основная команда:
-
-```powershell
-python main.py live-links --prepare
-```
-
-Она создает или находит тестовый Google календарь и два Yandex календаря,
-очищает их и сохраняет локальные config-файлы в `data/`.
-
-Финальная проверка:
-
-```powershell
-python main.py live-demo
-```
-
-Ожидаемый результат:
-
-```text
-LIVE DEMO PASSED
-- Google Calendar: create/update/delete OK
-- Yandex Calendar: create/update/delete OK
-- Google <-> Yandex sync OK
-- Duplicate protection OK
-```
+- `data/google_token.json`;
+- `data/google_oauth_state.json`;
+- `data/google_calendar_config.json`;
+- `data/yandex_calendar_config.json`;
+- `data/yandex_leader_calendar_config.json`;
+- `data/sync.db`;
+- `logs/*.log`;
+- `.venv/`;
+- `data/output/*.json`.
 
 ## Официальные источники
 
@@ -173,7 +103,5 @@ LIVE DEMO PASSED
   <https://developers.google.com/workspace/calendar/api/quickstart/python>
 - Google OAuth consent и test users:
   <https://developers.google.com/workspace/guides/configure-oauth-consent>
-- Google Calendar sharing:
-  <https://support.google.com/calendar/answer/37082>
 - Yandex app passwords:
   <https://yandex.com/support/id/authorization/app-passwords.html>

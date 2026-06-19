@@ -27,31 +27,51 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-## 2. Локальные доступы
+## 2. Локальные файлы
 
-В Git нет секретов. Для быстрого запуска владелец проекта передает архив с:
+Положите в корень проекта два файла от владельца проекта:
 
-- `.env`;
-- `data/google_token.json`;
-- `data/google_calendar_config.json`;
-- `data/yandex_calendar_config.json`;
-- `data/yandex_leader_calendar_config.json`.
+```text
+credentials.json
+.env
+```
 
-Файлы нужно положить в те же относительные пути внутри проекта.
+`credentials.json` нужен для Google OAuth. `.env` содержит Yandex логины и
+пароли приложений.
 
-Если проверяющий подключает свой Google-аккаунт, `data/google_token.json` ему
-передавать не надо. Нужен Google OAuth client JSON (`credentials.json` или
-`client_secret_*.json`), а Gmail проверяющего должен быть добавлен в Test users
-в Google Cloud, если OAuth приложение еще в Testing.
+## 3. Google авторизация
 
-## 3. Автоматическая live-проверка
+```powershell
+python main.py google auth-url
+```
+
+Откройте ссылку из вывода под своей Gmail-почтой, разрешите доступ и скопируйте
+финальный URL из адресной строки:
+
+```text
+http://localhost/?state=...&code=...&scope=...
+```
+
+Завершите авторизацию:
+
+```powershell
+python main.py google auth-finish "http://localhost/?state=...&code=...&scope=..."
+```
+
+## 4. Подготовка календарей
+
+```powershell
+python main.py live-links --prepare
+```
+
+Команда создает или находит тестовый Google календарь, два Yandex календаря,
+очищает их и печатает ссылки для ручной проверки.
+
+## 5. Автоматическая live-проверка
 
 ```powershell
 python main.py live-demo
 ```
-
-Команда очищает тестовые календари, создает события из разных источников,
-проверяет создание, обновление, hard delete и защиту от дублей.
 
 Ожидаемый результат:
 
@@ -63,7 +83,7 @@ LIVE DEMO PASSED
 - Duplicate protection OK
 ```
 
-## 4. Ручная проверка
+## 6. Ручная проверка
 
 Откройте два терминала в корне проекта.
 
@@ -79,17 +99,6 @@ python main.py watch
 python main.py live-links
 ```
 
-Если нужно сначала очистить тестовые календари и обновить config-файлы:
-
-```powershell
-python main.py live-links --prepare
-```
-
-`live-links` покажет ссылку на Google Calendar и две строки для Yandex:
-`developer_1` и `leader`. Для просмотра конкретного Yandex календаря нужно быть
-авторизованным в соответствующем аккаунте или открыть календарь в отдельном
-профиле браузера.
-
 Проверочный сценарий:
 
 1. Создать событие в Google Calendar.
@@ -101,25 +110,11 @@ python main.py live-links --prepare
 7. Проверить, что событие исчезло у остальных.
 8. Повторить тот же сценарий из Yandex `developer_1` или `leader`.
 
-## 5. Если проверка не стартует
+## 7. Если проверка не стартует
 
 Если вывод начинается с `LIVE DEMO CANNOT START` или `WATCH CANNOT START`,
-значит не хватает локальных доступов. Проверьте файлы из раздела 2 и подробную
-инструкцию в `docs/SECRETS_SETUP.md`.
+значит не хватает `credentials.json`, Google авторизации или данных в `.env`.
+Подробная подготовка Yandex паролей описана в `docs/SECRETS_SETUP.md`.
 
 Логи пишутся в `logs/sync.log`, служебные записи синхронизации - в
 `data/sync.db`.
-
-## 6. Обычные автотесты
-
-```powershell
-pytest
-```
-
-или:
-
-```powershell
-uv run pytest
-```
-
-Ожидаемый результат: все тесты проходят.
