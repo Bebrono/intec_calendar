@@ -13,6 +13,7 @@
 - Реальный Google Calendar API adapter.
 - Реальный Yandex Calendar adapter через CalDAV.
 - Проверочный сценарий Google + Yandex одной командой.
+- Визуальная проверка с паузами и ссылками на реальные календари.
 - Автотесты.
 
 ## Главная проверка
@@ -34,6 +35,14 @@ LIVE DEMO PASSED
 ```
 
 Эта команда сама очищает тестовые календари, создает события, проверяет синхронизацию Google + Yandex + JSON, проверяет обновления, удаления и защиту от дублей.
+
+Чтобы смотреть изменения в календарях глазами, запустите:
+
+```powershell
+python main.py live-demo --visual
+```
+
+Команда покажет ссылки на тестовые Google/Yandex календари и будет останавливаться после ключевых шагов.
 
 ## Быстрый запуск
 
@@ -80,6 +89,12 @@ python main.py demo
 
 ```powershell
 python main.py sync --real-google --real-yandex
+```
+
+Ссылки и ручной сценарий проверки:
+
+```powershell
+python main.py live-links --prepare
 ```
 
 Автотесты:

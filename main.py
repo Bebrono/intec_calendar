@@ -20,6 +20,8 @@ from app.services.google_smoke_test import run_google_smoke_test
 from app.services.live_demo import (
     LiveDemoError,
     LiveDemoPrerequisiteError,
+    LiveLinksError,
+    print_live_links,
     run_live_demo,
 )
 from app.services.sync_service import SyncService
@@ -48,9 +50,23 @@ def main() -> None:
         help="Use real Yandex Calendar instead of yandex_developer_1.json",
     )
     subparsers.add_parser("demo", help="Run deterministic demo scenario")
-    subparsers.add_parser(
+    live_demo_parser = subparsers.add_parser(
         "live-demo",
         help="Run Google + Yandex live verification scenario",
+    )
+    live_demo_parser.add_argument(
+        "--visual",
+        action="store_true",
+        help="Pause after key steps so the calendars can be inspected manually",
+    )
+    live_links_parser = subparsers.add_parser(
+        "live-links",
+        help="Print Google/Yandex calendar links and manual verification steps",
+    )
+    live_links_parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Create or clear test calendars before printing links",
     )
 
     google_parser = subparsers.add_parser("google", help="Google Calendar tools")
@@ -112,7 +128,7 @@ def main() -> None:
 
     if args.command == "live-demo":
         try:
-            run_live_demo(PROJECT_ROOT)
+            run_live_demo(PROJECT_ROOT, visual=args.visual)
         except LiveDemoPrerequisiteError as exc:
             print("LIVE DEMO CANNOT START")
             print(f"- {exc}")
@@ -121,6 +137,19 @@ def main() -> None:
             print("LIVE DEMO FAILED")
             print(f"- {exc}")
             raise SystemExit(1) from None
+        return
+
+    if args.command == "live-links":
+        try:
+            print_live_links(PROJECT_ROOT, prepare=args.prepare)
+        except LiveDemoPrerequisiteError as exc:
+            print("LIVE LINKS CANNOT START")
+            print(f"- {exc}")
+            raise SystemExit(2) from None
+        except LiveLinksError as exc:
+            print("LIVE LINKS CANNOT START")
+            print(f"- {exc}")
+            raise SystemExit(2) from None
         return
 
     if args.command == "google":

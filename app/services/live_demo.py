@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+from urllib.parse import quote
 
 from app.adapters import CalendarAdapter
 from app.bootstrap import build_database, build_sync_adapters
@@ -14,6 +15,7 @@ from app.models import CalendarEvent
 from app.services.google_calendar_config import (
     clear_sync_calendar as clear_google_sync_calendar,
     create_sync_calendar as create_google_sync_calendar,
+    load_sync_calendar_config as load_google_sync_calendar_config,
 )
 from app.services.google_oauth import TOKEN_PATH, build_calendar_service
 from app.services.sync_service import SyncService
@@ -21,6 +23,7 @@ from app.services.yandex_calendar_config import (
     build_yandex_client,
     clear_sync_calendar as clear_yandex_sync_calendar,
     create_sync_calendar as create_yandex_sync_calendar,
+    load_sync_calendar_config as load_yandex_sync_calendar_config,
     load_yandex_credentials,
 )
 from app.storage import Database
@@ -34,9 +37,21 @@ class LiveDemoPrerequisiteError(LiveDemoError):
     pass
 
 
+class LiveLinksError(LiveDemoError):
+    pass
+
+
 @dataclass(frozen=True)
 class LiveDemoResult:
     lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LiveCalendarLinks:
+    google_url: str
+    yandex_url: str
+    yandex_calendar_name: str
+    json_paths: tuple[Path, ...]
 
 
 @dataclass(frozen=True)
@@ -80,6 +95,85 @@ def prepare_live_calendars(root: Path = PROJECT_ROOT) -> None:
     clear_yandex_sync_calendar(yandex_client, root=root)
 
 
+def build_live_calendar_links(root: Path = PROJECT_ROOT) -> LiveCalendarLinks:
+    missing = []
+    google_config = None
+    yandex_config = None
+
+    try:
+        google_config = load_google_sync_calendar_config(root)
+    except FileNotFoundError:
+        missing.append(
+            "Google sync calendar config is missing: run "
+            "`python main.py live-links --prepare` first."
+        )
+
+    try:
+        yandex_config = load_yandex_sync_calendar_config(root)
+    except FileNotFoundError:
+        missing.append(
+            "Yandex sync calendar config is missing: run "
+            "`python main.py live-links --prepare` first."
+        )
+
+    if missing:
+        raise LiveLinksError(" ".join(missing))
+
+    assert google_config is not None
+    assert yandex_config is not None
+    return LiveCalendarLinks(
+        google_url=(
+            "https://calendar.google.com/calendar/u/0/r?"
+            f"cid={quote(google_config.calendar_id, safe='')}"
+        ),
+        yandex_url="https://calendar.yandex.ru/",
+        yandex_calendar_name=yandex_config.name,
+        json_paths=tuple(
+            root / "data" / "output" / account.filename
+            for account in CALENDAR_ACCOUNTS
+        ),
+    )
+
+
+def print_live_links(
+    root: Path = PROJECT_ROOT,
+    *,
+    prepare: bool = False,
+    prerequisite_checker: Callable[[Path], None] = check_live_demo_prerequisites,
+    calendar_preparer: Callable[[Path], None] = prepare_live_calendars,
+) -> LiveCalendarLinks:
+    try:
+        prerequisite_checker(root)
+        if prepare:
+            print("Preparing clean Google and Yandex test calendars...")
+            calendar_preparer(root)
+        links = build_live_calendar_links(root)
+    except LiveDemoError:
+        raise
+    except Exception as exc:
+        raise LiveLinksError(str(exc)) from exc
+
+    print("LIVE CALENDAR LINKS")
+    print(f"- Google test calendar: {links.google_url}")
+    print(
+        "- Yandex Calendar: "
+        f"{links.yandex_url} (calendar: {links.yandex_calendar_name})"
+    )
+    print("- Local JSON calendars:")
+    for path in links.json_paths:
+        print(f"  - {path}")
+
+    print("\nManual check:")
+    print("1. Open the Google test calendar link.")
+    print("2. Create any event in that Google test calendar.")
+    print("3. Run: python main.py sync --real-google --real-yandex")
+    print("4. Open Yandex Calendar and find the copied event.")
+    print("5. Create an event in the Yandex test calendar.")
+    print("6. Run: python main.py sync --real-google --real-yandex")
+    print("7. Open Google Calendar and find the copied event.")
+    return links
+
+
 def configure_live_demo_logger(log_file: Path) -> logging.Logger:
     log_file.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("calendar_sync_live_demo")
@@ -100,13 +194,55 @@ def configure_live_demo_logger(log_file: Path) -> logging.Logger:
     return logger
 
 
+class VisualGuide:
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        pause_callback: Callable[[str], None],
+    ) -> None:
+        self.enabled = enabled
+        self.pause_callback = pause_callback
+        self.links_printed = False
+
+    def show_links_once(self, root: Path) -> None:
+        if not self.enabled or self.links_printed:
+            return
+        links = build_live_calendar_links(root)
+        print("\nOpen these calendars to watch the visual demo:")
+        print(f"- Google test calendar: {links.google_url}")
+        print(
+            "- Yandex Calendar: "
+            f"{links.yandex_url} (calendar: {links.yandex_calendar_name})"
+        )
+        print("- Local JSON calendars:")
+        for path in links.json_paths:
+            print(f"  - {path}")
+        self.links_printed = True
+        self.pause("Open the calendar links, then press Enter to start the demo.")
+
+    def pause(self, message: str) -> None:
+        if self.enabled:
+            self.pause_callback(message)
+
+
+def default_visual_pause(message: str) -> None:
+    input(f"\n{message}\nPress Enter to continue...")
+
+
 def run_live_demo(
     root: Path = PROJECT_ROOT,
     *,
     dependencies: LiveDemoDependencies | None = None,
+    visual: bool = False,
+    pause_callback: Callable[[str], None] | None = None,
 ) -> LiveDemoResult:
     deps = dependencies or LiveDemoDependencies()
     ensure_project_dirs(root)
+    visual_guide = VisualGuide(
+        enabled=visual,
+        pause_callback=pause_callback or default_visual_pause,
+    )
 
     try:
         deps.prerequisite_checker(root)
@@ -115,9 +251,9 @@ def run_live_demo(
 
         print("Live demo setup: preparing clean JSON, Google, and Yandex calendars")
 
-        _run_json_to_live_scenario(root, deps, database, logger)
-        _run_google_to_all_scenario(root, deps, database, logger)
-        _run_yandex_to_all_scenario(root, deps, database, logger)
+        _run_json_to_live_scenario(root, deps, database, logger, visual_guide)
+        _run_google_to_all_scenario(root, deps, database, logger, visual_guide)
+        _run_yandex_to_all_scenario(root, deps, database, logger, visual_guide)
 
     except LiveDemoError:
         raise
@@ -141,9 +277,11 @@ def _run_json_to_live_scenario(
     deps: LiveDemoDependencies,
     database: Database,
     logger: logging.Logger,
+    visual: VisualGuide,
 ) -> None:
     print("\nScenario 1: Outlook JSON -> Google + Yandex")
     adapters = _reset_and_build_adapters(root, deps, database)
+    visual.show_links_once(root)
     manager = _find_adapter(adapters, owner="manager", system="outlook")
     google = _find_adapter(adapters, owner="developer_2", system="google")
     yandex = _find_adapter(adapters, owner="developer_1", system="yandex")
@@ -167,6 +305,10 @@ def _run_json_to_live_scenario(
     _assert_confirmed(yandex, "Live Demo Outlook to Google and Yandex")
     _assert_confirmed(leader, "Live Demo Outlook to Google and Yandex")
     print("- created Google and Yandex copies from Outlook JSON")
+    visual.pause(
+        "Check Google and Yandex: event "
+        "'Live Demo Outlook to Google and Yandex' should be visible."
+    )
 
     _update_event_title(
         manager,
@@ -179,6 +321,10 @@ def _run_json_to_live_scenario(
     _assert_confirmed(yandex, "Live Demo Outlook Updated")
     _assert_confirmed(leader, "Live Demo Outlook Updated")
     print("- propagated Outlook JSON update")
+    visual.pause(
+        "Check Google and Yandex: the event title should now be "
+        "'Live Demo Outlook Updated'."
+    )
 
     _mark_deleted(manager, "Live Demo Outlook Updated", datetime(2026, 7, 1, 10, 0, 0))
     _sync(adapters, database, logger)
@@ -186,6 +332,9 @@ def _run_json_to_live_scenario(
     _assert_deleted(yandex, "Live Demo Outlook Updated")
     _assert_deleted(leader, "Live Demo Outlook Updated")
     print("- propagated Outlook JSON deletion")
+    visual.pause(
+        "Check Google and Yandex: the event should be deleted or marked cancelled."
+    )
 
 
 def _run_google_to_all_scenario(
@@ -193,6 +342,7 @@ def _run_google_to_all_scenario(
     deps: LiveDemoDependencies,
     database: Database,
     logger: logging.Logger,
+    visual: VisualGuide,
 ) -> None:
     print("\nScenario 2: Google -> Yandex + JSON")
     adapters = _reset_and_build_adapters(root, deps, database)
@@ -222,6 +372,10 @@ def _run_google_to_all_scenario(
     _sync(adapters, database, logger)
     _assert_single_confirmed_event(adapters, "Live Demo Google to Everyone")
     print("- created Yandex and JSON copies without duplicates")
+    visual.pause(
+        "Check Yandex and JSON files: event "
+        "'Live Demo Google to Everyone' should be copied from Google."
+    )
 
     current = _find_event_by_id(google, created.id)
     google.update_event(
@@ -238,6 +392,10 @@ def _run_google_to_all_scenario(
     _assert_confirmed(manager, "Live Demo Google Updated")
     _assert_confirmed(leader, "Live Demo Google Updated")
     print("- propagated Google update")
+    visual.pause(
+        "Check Yandex and JSON files: the Google event should now be "
+        "'Live Demo Google Updated'."
+    )
 
     google.delete_event(created.id)
     _sync(adapters, database, logger)
@@ -245,6 +403,9 @@ def _run_google_to_all_scenario(
     _assert_deleted(manager, "Live Demo Google Updated")
     _assert_deleted(leader, "Live Demo Google Updated")
     print("- propagated Google deletion")
+    visual.pause(
+        "Check Yandex and JSON files: the Google-origin event should be deleted."
+    )
 
 
 def _run_yandex_to_all_scenario(
@@ -252,6 +413,7 @@ def _run_yandex_to_all_scenario(
     deps: LiveDemoDependencies,
     database: Database,
     logger: logging.Logger,
+    visual: VisualGuide,
 ) -> None:
     print("\nScenario 3: Yandex -> Google + JSON")
     adapters = _reset_and_build_adapters(root, deps, database)
@@ -281,6 +443,10 @@ def _run_yandex_to_all_scenario(
     _sync(adapters, database, logger)
     _assert_single_confirmed_event(adapters, "Live Demo Yandex to Everyone")
     print("- created Google and JSON copies without duplicates")
+    visual.pause(
+        "Check Google and JSON files: event "
+        "'Live Demo Yandex to Everyone' should be copied from Yandex."
+    )
 
     current = _find_event_by_id(yandex, created.id)
     yandex.update_event(
@@ -297,6 +463,10 @@ def _run_yandex_to_all_scenario(
     _assert_confirmed(manager, "Live Demo Yandex Updated")
     _assert_confirmed(leader, "Live Demo Yandex Updated")
     print("- propagated Yandex update")
+    visual.pause(
+        "Check Google and JSON files: the Yandex event should now be "
+        "'Live Demo Yandex Updated'."
+    )
 
     yandex.delete_event(created.id)
     _sync(adapters, database, logger)
@@ -304,6 +474,9 @@ def _run_yandex_to_all_scenario(
     _assert_deleted(manager, "Live Demo Yandex Updated")
     _assert_deleted(leader, "Live Demo Yandex Updated")
     print("- propagated Yandex deletion")
+    visual.pause(
+        "Check Google and JSON files: the Yandex-origin event should be deleted."
+    )
 
 
 def _reset_and_build_adapters(
