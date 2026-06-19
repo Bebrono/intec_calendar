@@ -28,11 +28,13 @@ def test_google_calendar_adapter_crud_with_fake_service():
     )
     events = adapter.get_events()
     deleted = adapter.delete_event(updated.id)
+    events_after_delete = adapter.get_events()
 
     assert created.id == "google_event_1"
     assert updated.title == "Smoke test updated"
     assert [event.id for event in events] == ["google_event_1"]
     assert deleted.status == "deleted"
+    assert events_after_delete == []
 
 
 class FakeGoogleService:

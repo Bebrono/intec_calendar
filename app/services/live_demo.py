@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,9 +19,10 @@ from app.services.google_calendar_config import (
 from app.services.google_oauth import TOKEN_PATH, build_calendar_service
 from app.services.sync_service import SyncService
 from app.services.yandex_calendar_config import (
+    YANDEX_SYNC_OWNERS,
     build_yandex_client,
     clear_sync_calendar as clear_yandex_sync_calendar,
-    create_sync_calendar as create_yandex_sync_calendar,
+    deduplicate_sync_calendars as deduplicate_yandex_sync_calendars,
     load_sync_calendar_config as load_yandex_sync_calendar_config,
     load_yandex_credentials,
 )
@@ -47,10 +47,16 @@ class LiveDemoResult:
 
 
 @dataclass(frozen=True)
-class LiveCalendarLinks:
-    google_url: str
+class YandexCalendarLink:
+    owner: str
     yandex_url: str
     yandex_calendar_name: str
+
+
+@dataclass(frozen=True)
+class LiveCalendarLinks:
+    google_url: str
+    yandex_calendars: tuple[YandexCalendarLink, ...]
     json_paths: tuple[Path, ...]
 
 
@@ -72,13 +78,18 @@ def check_live_demo_prerequisites(root: Path = PROJECT_ROOT) -> None:
             "and `python main.py google auth-finish ...` on this machine."
         )
 
-    try:
-        load_yandex_credentials(root)
-    except RuntimeError:
-        if not os.getenv("YANDEX_APP_PASSWORD"):
+    for owner in YANDEX_SYNC_OWNERS:
+        try:
+            load_yandex_credentials(root, owner=owner)
+        except RuntimeError:
+            env_key = (
+                "YANDEX_APP_PASSWORD"
+                if owner == "developer_1"
+                else f"YANDEX_{owner.upper()}_APP_PASSWORD"
+            )
             missing.append(
-                "YANDEX_APP_PASSWORD is missing: save the Yandex app password "
-                "to local `.env` or an environment variable."
+                f"{env_key} is missing: save the Yandex app password "
+                f"for {owner} to local `.env` or an environment variable."
             )
 
     if missing:
@@ -90,15 +101,16 @@ def prepare_live_calendars(root: Path = PROJECT_ROOT) -> None:
     deduplicate_google_sync_calendars(google_service, root=root)
     clear_google_sync_calendar(google_service, root=root)
 
-    yandex_client = build_yandex_client(root)
-    create_yandex_sync_calendar(yandex_client, root=root)
-    clear_yandex_sync_calendar(yandex_client, root=root)
+    for owner in YANDEX_SYNC_OWNERS:
+        yandex_client = build_yandex_client(root, owner=owner)
+        deduplicate_yandex_sync_calendars(yandex_client, root=root, owner=owner)
+        clear_yandex_sync_calendar(yandex_client, root=root, owner=owner)
 
 
 def build_live_calendar_links(root: Path = PROJECT_ROOT) -> LiveCalendarLinks:
     missing = []
     google_config = None
-    yandex_config = None
+    yandex_configs = []
 
     try:
         google_config = load_google_sync_calendar_config(root)
@@ -108,26 +120,34 @@ def build_live_calendar_links(root: Path = PROJECT_ROOT) -> LiveCalendarLinks:
             "`python main.py live-links --prepare` first."
         )
 
-    try:
-        yandex_config = load_yandex_sync_calendar_config(root)
-    except FileNotFoundError:
-        missing.append(
-            "Yandex sync calendar config is missing: run "
-            "`python main.py live-links --prepare` first."
-        )
+    for owner in YANDEX_SYNC_OWNERS:
+        try:
+            config = load_yandex_sync_calendar_config(root, owner=owner)
+            yandex_configs.append((owner, config))
+        except FileNotFoundError:
+            missing.append(
+                f"Yandex sync calendar config for {owner} is missing: run "
+                f"`python main.py yandex --owner {owner} "
+                "create-sync-calendar` or `python main.py live-links --prepare` first."
+            )
 
     if missing:
         raise LiveLinksError(" ".join(missing))
 
     assert google_config is not None
-    assert yandex_config is not None
     return LiveCalendarLinks(
         google_url=(
             "https://calendar.google.com/calendar/u/0/r?"
             f"cid={quote(google_config.calendar_id, safe='')}"
         ),
-        yandex_url="https://calendar.yandex.ru/",
-        yandex_calendar_name=yandex_config.name,
+        yandex_calendars=tuple(
+            YandexCalendarLink(
+                owner=owner,
+                yandex_url="https://calendar.yandex.ru/",
+                yandex_calendar_name=config.name,
+            )
+            for owner, config in yandex_configs
+        ),
         json_paths=tuple(
             root / "data" / "output" / account.filename
             for account in CALENDAR_ACCOUNTS
@@ -155,22 +175,22 @@ def print_live_links(
 
     print("LIVE CALENDAR LINKS")
     print(f"- Google test calendar: {links.google_url}")
-    print(
-        "- Yandex Calendar: "
-        f"{links.yandex_url} (calendar: {links.yandex_calendar_name})"
-    )
+    for yandex_link in links.yandex_calendars:
+        print(
+            f"- Yandex Calendar ({yandex_link.owner}): "
+            f"{yandex_link.yandex_url} "
+            f"(calendar: {yandex_link.yandex_calendar_name})"
+        )
     print("- Local JSON calendars:")
     for path in links.json_paths:
         print(f"  - {path}")
 
     print("\nManual check:")
-    print("1. Open the Google test calendar link.")
-    print("2. Create any event in that Google test calendar.")
-    print("3. Run: python main.py sync --real-google --real-yandex")
-    print("4. Open Yandex Calendar and find the copied event.")
-    print("5. Create an event in the Yandex test calendar.")
-    print("6. Run: python main.py sync --real-google --real-yandex")
-    print("7. Open Google Calendar and find the copied event.")
+    print("1. In another terminal, run: python main.py watch")
+    print("2. Open the Google and Yandex test calendar links.")
+    print("3. Create, update, or delete an event in Google.")
+    print("4. Wait up to 10 seconds and check the change in Yandex.")
+    print("5. Repeat the same flow from Yandex to Google.")
     return links
 
 
@@ -211,10 +231,12 @@ class VisualGuide:
         links = build_live_calendar_links(root)
         print("\nOpen these calendars to watch the visual demo:")
         print(f"- Google test calendar: {links.google_url}")
-        print(
-            "- Yandex Calendar: "
-            f"{links.yandex_url} (calendar: {links.yandex_calendar_name})"
-        )
+        for yandex_link in links.yandex_calendars:
+            print(
+                f"- Yandex Calendar ({yandex_link.owner}): "
+                f"{yandex_link.yandex_url} "
+                f"(calendar: {yandex_link.yandex_calendar_name})"
+            )
         print("- Local JSON calendars:")
         for path in links.json_paths:
             print(f"  - {path}")
@@ -421,7 +443,8 @@ def _run_google_to_all_scenario(
         f"Check Yandex and JSON files: the Google event should now be {updated_title!r}."
     )
 
-    google.delete_event(created.id)
+    current = _find_event_by_title(google, updated_title)
+    google.delete_event(current.id)
     _sync(adapters, database, logger)
     _assert_deleted(yandex, updated_title)
     _assert_deleted(manager, updated_title)
@@ -493,7 +516,8 @@ def _run_yandex_to_all_scenario(
         f"Check Google and JSON files: the Yandex event should now be {updated_title!r}."
     )
 
-    yandex.delete_event(created.id)
+    current = _find_event_by_title(yandex, updated_title)
+    yandex.delete_event(current.id)
     _sync(adapters, database, logger)
     _assert_deleted(google, updated_title)
     _assert_deleted(manager, updated_title)
@@ -620,10 +644,7 @@ def _mark_deleted(
     updated_at: datetime,
 ) -> None:
     event = _find_event_by_title(adapter, title)
-    adapter.update_event(
-        event.id,
-        event.model_copy(update={"status": "deleted", "updated_at": updated_at}),
-    )
+    adapter.delete_event(event.id)
 
 
 def _assert_confirmed(adapter: CalendarAdapter, title: str) -> None:
@@ -643,11 +664,11 @@ def _assert_deleted(adapter: CalendarAdapter, title: str) -> None:
     matches = [
         event
         for event in adapter.get_events()
-        if event.title == title and event.status == "deleted"
+        if event.title == title and event.status not in {"deleted", "cancelled"}
     ]
-    if len(matches) != 1:
+    if matches:
         raise LiveDemoError(
-            f"Expected one deleted event {title!r} in "
+            f"Expected no active event {title!r} in "
             f"{adapter.system}/{adapter.owner}, found {len(matches)}"
         )
 

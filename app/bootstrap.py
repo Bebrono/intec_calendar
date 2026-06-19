@@ -8,6 +8,7 @@ from app.services.event_mapper import EventMapper
 from app.services.google_calendar_config import load_sync_calendar_config
 from app.services.google_oauth import build_calendar_service
 from app.services.yandex_calendar_config import (
+    YANDEX_SYNC_OWNERS,
     build_yandex_client,
     load_sync_calendar as load_yandex_sync_calendar,
 )
@@ -57,7 +58,7 @@ def build_sync_adapters(
         if account.owner == "developer_2" and account.system == "google":
             if use_real_google:
                 continue
-        if account.owner == "developer_1" and account.system == "yandex":
+        if account.owner in YANDEX_SYNC_OWNERS and account.system == "yandex":
             if use_real_yandex:
                 continue
         adapters.append(
@@ -70,13 +71,18 @@ def build_sync_adapters(
         )
 
     if use_real_yandex:
-        yandex_client = build_yandex_client(root)
-        adapters.append(
-            YandexCalendarAdapter(
-                calendar=load_yandex_sync_calendar(yandex_client, root=root),
-                owner="developer_1",
+        for owner in YANDEX_SYNC_OWNERS:
+            yandex_client = build_yandex_client(root, owner=owner)
+            adapters.append(
+                YandexCalendarAdapter(
+                    calendar=load_yandex_sync_calendar(
+                        yandex_client,
+                        root=root,
+                        owner=owner,
+                    ),
+                    owner=owner,
+                )
             )
-        )
 
     if use_real_google:
         google_config = load_sync_calendar_config(root)

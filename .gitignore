@@ -12,4 +12,5 @@ data/google_token.json
 data/google_oauth_state.json
 data/google_calendar_config.json
 data/yandex_calendar_config.json
+data/yandex_leader_calendar_config.json
 logs/*.log

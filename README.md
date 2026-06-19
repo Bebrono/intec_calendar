@@ -1,24 +1,55 @@
 # Calendar Sync Service
 
-Прототип сервиса синхронизации календарей на Python.
+Python-сервис синхронизации календарей команды. Прототип объединяет:
 
-Проект показывает, как одно событие синхронизируется между участниками команды, даже если они используют разные календарные системы: Google Calendar, Yandex Calendar и JSON mock-календари вместо еще не подключенного Outlook API.
+- Google Calendar для `developer_2`;
+- два Yandex Calendar через CalDAV: `developer_1` и `leader`;
+- Outlook manager в виде локального JSON mock-календаря.
 
-## Что готово
+Сервис хранит единое состояние событий в SQLite, связывает копии через
+`sync_group_id` и распространяет создание, обновление и удаление между всеми
+участниками. Удаление является настоящим удалением из календарей; в БД остается
+только служебная tombstone-запись, чтобы событие не создалось заново.
 
-- Синхронизация создания, обновления и удаления событий.
-- Защита от дублей и циклической синхронизации.
-- SQLite-база соответствий между копиями событий.
-- JSON mock-адаптеры для локальной демонстрации.
-- Реальный Google Calendar API adapter.
-- Реальный Yandex Calendar adapter через CalDAV.
-- Проверочный сценарий Google + Yandex одной командой.
-- Визуальная проверка с паузами и ссылками на реальные календари.
-- Автотесты.
+## Старт проверки
 
-## Главная проверка
+Все команды ниже запускаются в корне проекта, то есть в папке, где лежит
+`main.py`. На Windows проще всего открыть терминал так: открыть папку проекта в
+Проводнике, кликнуть правой кнопкой по пустому месту и выбрать
+`Открыть в Терминале` или `Open in Terminal`.
 
-На подготовленной тестовой машине проверяющему нужна одна команда:
+1. Склонировать проект и установить зависимости:
+
+```powershell
+git clone https://github.com/Bebrono/intec_calendar.git
+cd intec_calendar
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Если PowerShell не дает активировать окружение:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+2. Положить локальные доступы в проект.
+
+Проверяющему нужны файлы и секреты, которые не коммитятся в Git:
+
+- `.env` с паролями приложений Yandex;
+- `data/google_token.json`;
+- `data/google_calendar_config.json`;
+- `data/yandex_calendar_config.json`;
+- `data/yandex_leader_calendar_config.json`.
+
+Если эти файлы передаются отдельно архивом, их нужно разложить по тем же путям
+относительно корня проекта.
+
+3. Запустить автоматическую live-проверку:
 
 ```powershell
 python main.py live-demo
@@ -34,79 +65,53 @@ LIVE DEMO PASSED
 - Duplicate protection OK
 ```
 
-Эта команда сама очищает тестовые календари, создает события, проверяет синхронизацию Google + Yandex + JSON, проверяет обновления, удаления и защиту от дублей.
+4. Для ручной проверки открыть два терминала.
 
-Чтобы смотреть изменения в календарях глазами, запустите:
-
-```powershell
-python main.py live-demo --visual
-```
-
-Команда покажет ссылки на тестовые Google/Yandex календари и будет останавливаться после ключевых шагов.
-
-Ссылки открывают приватные календари: в браузере нужно быть авторизованным в Google/Yandex аккаунте, у которого есть доступ.
-
-## Быстрый запуск
+В первом терминале запустить постоянную синхронизацию:
 
 ```powershell
-git clone https://github.com/Bebrono/intec_calendar.git
-cd intec_calendar
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python main.py live-demo
+python main.py watch
 ```
 
-Если PowerShell не дает активировать окружение:
+Во втором терминале вывести ссылки на тестовые календари:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+python main.py live-links
 ```
 
-## Важно про доступы
-
-`live-demo` использует реальные тестовые календари Google и Yandex.
-
-Секреты не лежат в публичном репозитории: `.env`, Google OAuth файлы, Google token и локальные calendar config файлы игнорируются Git. На проверочной машине они должны быть заранее подготовлены владельцем проекта.
-
-Если доступов нет, команда завершится коротким сообщением:
-
-```text
-LIVE DEMO CANNOT START
-- ...
-```
-
-Проверяющему не нужно вручную редактировать JSON, менять `updated_at`, создавать календари или разбираться в OAuth.
-
-## Дополнительные команды
-
-Локальная JSON-демонстрация без внешних API:
-
-```powershell
-python main.py demo
-```
-
-Обычная синхронизация с реальными Google и Yandex:
-
-```powershell
-python main.py sync --real-google --real-yandex
-```
-
-Ссылки и ручной сценарий проверки:
+Если нужно сначала очистить тестовые календари и подготовить свежее состояние:
 
 ```powershell
 python main.py live-links --prepare
 ```
 
-Автотесты:
+Дальше можно открыть ссылки из `live-links`, создать, изменить или удалить
+событие в Google/Yandex и подождать до 10 секунд. Изменение должно появиться у
+остальных участников.
+
+## Что проверять
+
+- Создание события в Google появляется у обоих Yandex участников и в Outlook JSON.
+- Создание события в Yandex появляется в Google, втором Yandex календаре и Outlook JSON.
+- Обновление названия или времени у любого участника расходится всем.
+- Удаление у любого участника удаляет событие у остальных.
+- Повторный цикл синхронизации не создает дубликаты.
+
+## Важные файлы
+
+- `app/services/sync_service.py` - основная логика синхронизации.
+- `app/storage/database.py` - SQLite-таблицы `synced_events`, `event_mappings`, `sync_logs`.
+- `app/adapters/` - адаптеры Google, Yandex и JSON mock Outlook.
+- `docs/REVIEWER_GUIDE.md` - короткая инструкция для проверяющего.
+- `docs/SECRETS_SETUP.md` - какие локальные ключи нужны и куда их класть.
+- `docs/ARCHITECTURE.md` - краткое описание архитектуры.
+
+## Тесты
+
+Локальные автотесты без ручной проверки календарей:
 
 ```powershell
 pytest
 ```
 
-## Документация
-
-- [Инструкция для проверяющего](docs/REVIEWER_GUIDE.md)
-- [Архитектура проекта](docs/ARCHITECTURE.md)
-- [Подготовка секретов и тестовых календарей](docs/SECRETS_SETUP.md)
+Ожидаемый результат: все тесты проходят.

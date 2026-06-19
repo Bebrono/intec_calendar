@@ -10,9 +10,9 @@ from app.logger import configure_logger
 from app.models import CalendarEvent
 from app.services.sync_service import SyncService
 from app.services.yandex_calendar_config import (
+    YANDEX_SYNC_OWNERS,
     build_yandex_client,
     clear_sync_calendar,
-    load_sync_calendar,
 )
 
 
@@ -23,10 +23,13 @@ def run_yandex_integration_demo(root: Path = PROJECT_ROOT) -> None:
     ensure_project_dirs(root)
     logger = configure_logger(root / "logs" / "sync.log")
     database = build_database(root)
-    yandex_client = build_yandex_client(root)
+    yandex_clients = {
+        owner: build_yandex_client(root, owner=owner)
+        for owner in YANDEX_SYNC_OWNERS
+    }
 
     print("Integration demo setup: reset SQLite, JSON output, and Yandex test calendar")
-    _reset_state(root, database, yandex_client)
+    _reset_state(root, database, yandex_clients)
 
     print("\nScenario 1: JSON -> Yandex")
     adapters = build_sync_adapters(root=root, use_real_yandex=True)
@@ -67,21 +70,13 @@ def run_yandex_integration_demo(root: Path = PROJECT_ROOT) -> None:
     print("- updated Yandex copy")
 
     event = _find_event(manager.get_events(), JSON_TO_YANDEX_EVENT_ID)
-    manager.update_event(
-        event.id,
-        event.model_copy(
-            update={
-                "status": "deleted",
-                "updated_at": datetime(2026, 6, 20, 10, 0, 0),
-            }
-        ),
-    )
+    manager.delete_event(event.id)
     _run_sync(adapters, database, logger)
     _assert_yandex_deleted(yandex, "Live JSON to Yandex Updated")
     print("- propagated deletion to Yandex")
 
     print("\nScenario 2: Yandex -> JSON")
-    _reset_state(root, database, yandex_client)
+    _reset_state(root, database, yandex_clients)
     adapters = build_sync_adapters(root=root, use_real_yandex=True)
     yandex = _find_yandex_adapter(adapters)
 
@@ -125,14 +120,15 @@ def run_yandex_integration_demo(root: Path = PROJECT_ROOT) -> None:
     print("\nYandex integration demo complete")
 
 
-def _reset_state(root: Path, database, yandex_client) -> None:
+def _reset_state(root: Path, database, yandex_clients) -> None:
     database.reset_db()
     for account in CALENDAR_ACCOUNTS:
         (root / "data" / "output" / account.filename).write_text(
             "[]",
             encoding="utf-8",
         )
-    clear_sync_calendar(yandex_client, root=root)
+    for owner, yandex_client in yandex_clients.items():
+        clear_sync_calendar(yandex_client, root=root, owner=owner)
 
 
 def _run_sync(adapters, database, logger) -> None:
@@ -180,11 +176,11 @@ def _assert_yandex_title(adapter: YandexCalendarAdapter, title: str) -> None:
 
 
 def _assert_yandex_deleted(adapter: YandexCalendarAdapter, title: str) -> None:
-    if not any(
-        event.title == title and event.status == "deleted"
+    if any(
+        event.title == title and event.status not in {"deleted", "cancelled"}
         for event in adapter.get_events()
     ):
-        raise AssertionError(f"Yandex event {title!r} is not marked deleted")
+        raise AssertionError(f"Yandex event {title!r} is still active")
 
 
 def _assert_json_title(adapters, owner: str, system: str, title: str) -> None:
@@ -198,5 +194,5 @@ def _assert_json_title(adapters, owner: str, system: str, title: str) -> None:
 
 def _assert_json_deleted(adapters, owner: str, system: str) -> None:
     adapter = _find_adapter(adapters, owner=owner, system=system)
-    if not any(event.status == "deleted" for event in adapter.get_events()):
-        raise AssertionError(f"No deleted JSON event found in {system}/{owner}")
+    if adapter.get_events():
+        raise AssertionError(f"JSON events still found in {system}/{owner}")

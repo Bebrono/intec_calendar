@@ -67,12 +67,15 @@ class FileCalendarAdapter(CalendarAdapter):
         raw_events = self._read_raw_events()
         for index, item in enumerate(raw_events):
             if item.get("id") == event_id:
-                item["status"] = "deleted"
-                item["updated_at"] = datetime.now().replace(microsecond=0).isoformat()
-                raw_events[index] = item
+                deleted_item = dict(item)
+                deleted_item["status"] = "deleted"
+                deleted_item["updated_at"] = (
+                    datetime.now().replace(microsecond=0).isoformat()
+                )
+                del raw_events[index]
                 self._write_raw_events(raw_events)
                 return self.mapper.from_json(
-                    item,
+                    deleted_item,
                     source_system=self.system,
                     source_owner=self.owner,
                 )

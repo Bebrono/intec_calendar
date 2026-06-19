@@ -64,7 +64,7 @@ class YandexEventMapper:
         vevent.add("dtend", self._to_aware(event.end_time))
         vevent.add("dtstamp", datetime.now(UTC))
         vevent.add("last-modified", self._to_utc(event.updated_at))
-        vevent.add("status", "CONFIRMED")
+        vevent.add("status", "CANCELLED" if event.status == "deleted" else "CONFIRMED")
         vevent.add(SYNC_STATUS_KEY, event.status)
         vevent.add(SYNC_UPDATED_AT_KEY, event.updated_at.isoformat())
         vevent.add(SYNC_ORGANIZER_KEY, event.organizer)
@@ -106,6 +106,9 @@ class YandexEventMapper:
         return [str(attendee).removeprefix("mailto:") for attendee in attendees]
 
     def _extract_status(self, vevent: Event, description: str | None) -> str:
+        raw_status = str(vevent.get("STATUS", "")).lower()
+        if raw_status == "cancelled":
+            return raw_status
         if description:
             match = DESCRIPTION_STATUS_RE.search(description)
             if match:
@@ -113,6 +116,8 @@ class YandexEventMapper:
         return str(vevent.get(SYNC_STATUS_KEY) or vevent.get("STATUS", "CONFIRMED")).lower()
 
     def _extract_updated_at(self, vevent: Event) -> datetime:
+        if vevent.get("LAST-MODIFIED"):
+            return self._to_local_naive(vevent.decoded("LAST-MODIFIED"))
         description = self._optional_text(vevent.get("DESCRIPTION"))
         if description:
             match = DESCRIPTION_UPDATED_AT_RE.search(description)

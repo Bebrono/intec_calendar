@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     create_engine,
 )
@@ -37,6 +38,23 @@ class EventMappingRecord(Base):
     last_synced_at = Column(DateTime, nullable=True)
     status = Column(String, nullable=False, default="active")
     last_event_updated_at = Column(DateTime, nullable=True)
+
+
+class SyncedEventRecord(Base):
+    __tablename__ = "synced_events"
+
+    sync_group_id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    organizer = Column(String, nullable=False)
+    attendees_json = Column(Text, nullable=False, default="[]")
+    source_system = Column(String, nullable=False)
+    source_owner = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="confirmed")
+    updated_at = Column(DateTime, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
 
 
 class SyncLogRecord(Base):

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from app.adapters.base import CalendarAdapter
 from app.models import CalendarEvent
 from app.services.google_event_mapper import GoogleEventMapper
@@ -62,14 +65,20 @@ class GoogleCalendarAdapter(CalendarAdapter):
             .get(calendarId=self.calendar_id, eventId=event_id)
             .execute()
         )
-        body = dict(current)
-        body["status"] = "cancelled"
-        updated = (
-            self.service.events()
-            .update(calendarId=self.calendar_id, eventId=event_id, body=body)
-            .execute()
+        deleted = self.mapper.from_google(current, source_owner=self.owner).model_copy(
+            update={
+                "status": "deleted",
+                "updated_at": datetime.now(ZoneInfo(self.mapper.timezone)).replace(
+                    microsecond=0,
+                    tzinfo=None,
+                ),
+            }
         )
-        return self.mapper.from_google(updated, source_owner=self.owner)
+        self.service.events().delete(
+            calendarId=self.calendar_id,
+            eventId=event_id,
+        ).execute()
+        return deleted
 
     def _is_supported_event(self, payload: dict) -> bool:
         if payload.get("eventType") not in (None, "default"):

@@ -1,7 +1,11 @@
+import json
 from datetime import datetime
 from app.models import CalendarEvent
 from app.services.google_event_mapper import (
     DEFAULT_TIMEZONE,
+    SYNC_ATTENDEES_KEY,
+    SYNC_ORGANIZER_KEY,
+    SYNC_STATUS_KEY,
     SYNC_UPDATED_AT_KEY,
     GoogleEventMapper,
 )
@@ -33,6 +37,12 @@ def test_calendar_event_is_converted_to_google_payload():
         payload["extendedProperties"]["private"][SYNC_UPDATED_AT_KEY]
         == "2026-06-17T09:00:00"
     )
+    assert payload["extendedProperties"]["private"][SYNC_ORGANIZER_KEY] == "manager"
+    assert (
+        json.loads(payload["extendedProperties"]["private"][SYNC_ATTENDEES_KEY])
+        == ["dev@example.com", "developer_1"]
+    )
+    assert payload["extendedProperties"]["private"][SYNC_STATUS_KEY] == "confirmed"
 
 
 def test_google_payload_is_converted_to_calendar_event():
@@ -50,6 +60,9 @@ def test_google_payload_is_converted_to_calendar_event():
         "extendedProperties": {
             "private": {
                 SYNC_UPDATED_AT_KEY: "2026-06-17T09:30:00",
+                SYNC_ORGANIZER_KEY: "manager",
+                SYNC_ATTENDEES_KEY: '["developer_1", "dev@example.com"]',
+                SYNC_STATUS_KEY: "confirmed",
             }
         },
     }
@@ -59,6 +72,8 @@ def test_google_payload_is_converted_to_calendar_event():
     assert event.id == "google_1"
     assert event.title == "Google event"
     assert event.status == "deleted"
+    assert event.organizer == "manager"
+    assert event.attendees == ["developer_1", "dev@example.com"]
     assert event.source_system == "google"
     assert event.start_time == datetime(2026, 6, 17, 10, 0, 0)
-    assert event.updated_at == datetime(2026, 6, 17, 9, 30, 0)
+    assert event.updated_at == datetime(2026, 6, 17, 14, 0, 0)

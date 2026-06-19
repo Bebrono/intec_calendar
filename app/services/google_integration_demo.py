@@ -67,15 +67,7 @@ def run_google_integration_demo(root: Path = PROJECT_ROOT) -> None:
     print("- updated Google copy")
 
     event = _find_event(manager.get_events(), JSON_TO_GOOGLE_EVENT_ID)
-    manager.update_event(
-        event.id,
-        event.model_copy(
-            update={
-                "status": "deleted",
-                "updated_at": datetime(2026, 6, 18, 10, 0, 0),
-            }
-        ),
-    )
+    manager.delete_event(event.id)
     _run_sync(adapters, database, logger)
     _assert_google_deleted(google, "Live JSON to Google Updated")
     print("- propagated deletion to Google")
@@ -186,8 +178,11 @@ def _assert_google_title(adapter: GoogleCalendarAdapter, title: str) -> None:
 
 
 def _assert_google_deleted(adapter: GoogleCalendarAdapter, title: str) -> None:
-    if not any(event.title == title and event.status == "deleted" for event in adapter.get_events()):
-        raise AssertionError(f"Google event {title!r} is not marked deleted")
+    if any(
+        event.title == title and event.status not in {"deleted", "cancelled"}
+        for event in adapter.get_events()
+    ):
+        raise AssertionError(f"Google event {title!r} is still active")
 
 
 def _assert_json_title(adapters, owner: str, system: str, title: str) -> None:
@@ -198,5 +193,5 @@ def _assert_json_title(adapters, owner: str, system: str, title: str) -> None:
 
 def _assert_json_deleted(adapters, owner: str, system: str) -> None:
     adapter = _find_adapter(adapters, owner=owner, system=system)
-    if not any(event.status == "deleted" for event in adapter.get_events()):
-        raise AssertionError(f"No deleted JSON event found in {system}/{owner}")
+    if adapter.get_events():
+        raise AssertionError(f"JSON events still found in {system}/{owner}")
